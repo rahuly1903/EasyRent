@@ -1,0 +1,18 @@
+{
+  "rental_picker": {
+    "name": "Rental date picker",
+    "start_label": "Rental start date",
+    "select_date": "Select a rental start date",
+    "select_variant": "Choose a variant",
+    "unavailable": "Grey dates are unavailable because they overlap an existing booking.",
+    "all_available": "All dates available",
+    "overlap_error": "These dates overlap an existing booking. Choose another start date.",
+    "availability_error": "Could not check availability. Try again.",
+    "cta": "Rent now",
+    "duration_label": "Duration",
+    "end_label": "Rental end date",
+    "clear": "Clear",
+    "save": "Save",
+    "close": "Close"
+  }
+}

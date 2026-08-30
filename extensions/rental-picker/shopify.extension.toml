@@ -1,0 +1,7 @@
+api_version = "2026-10"
+
+[[extensions]]
+name = "Rental picker"
+handle = "rental-picker"
+uid = "be280528-3bd9-4f01-4bea-83d15b9568ab7e7fc009"
+type = "theme"

@@ -1,0 +1,132 @@
+{% assign proxy_base = block.settings.proxy_base | default: '/apps/rental' %}
+
+<div
+  class="rental-picker"
+  data-rental-picker
+  {{ block.shopify_attributes }}
+  data-proxy-base="{{ proxy_base }}"
+  data-shop="{{ shop.permanent_domain }}"
+  data-product-id="{{ product.id }}"
+  data-product-handle="{{ product.handle }}"
+  data-msg-unavailable="{{ 'rental_picker.unavailable' | t | escape }}"
+  data-msg-available="{{ 'rental_picker.all_available' | t | escape }}"
+  data-msg-overlap="{{ 'rental_picker.overlap_error' | t | escape }}"
+  data-msg-availability-error="{{ 'rental_picker.availability_error' | t | escape }}"
+  data-msg-duration="{{ 'rental_picker.duration_label' | t | escape }}"
+  data-msg-clear="{{ 'rental_picker.clear' | t | escape }}"
+  data-msg-save="{{ 'rental_picker.save' | t | escape }}"
+  data-msg-close="{{ 'rental_picker.close' | t | escape }}"
+>
+  <script type="application/json" data-rental-config>
+    {
+      "optionNames": [
+        {%- for option in product.options_with_values -%}
+          {{ option.name | json }}{% unless forloop.last %},{% endunless %}
+        {%- endfor -%}
+      ],
+      "variants": [
+        {%- for variant in product.variants -%}
+          {
+            "id": {{ variant.id | json }},
+            "title": {{ variant.title | json }},
+            "price": {{ variant.price | json }},
+            "options": {{ variant.options | json }},
+            "option1": {{ variant.option1 | json }},
+            "option2": {{ variant.option2 | json }},
+            "option3": {{ variant.option3 | json }}
+          }{% unless forloop.last %},{% endunless %}
+        {%- endfor -%}
+      ],
+      "securityDeposit": {% if product.metafields.app.security_deposit.value.amount %}{{ product.metafields.app.security_deposit.value.amount | json }}{% else %}null{% endif %},
+      "moneyFormat": {{ shop.money_format | json }}
+    }
+  </script>
+
+  <label class="rental-picker__label" for="rental-picker-{{ product.id }}">
+    {{ 'rental_picker.start_label' | t }}
+  </label>
+  <div class="rental-picker__field">
+    <input
+      id="rental-picker-{{ product.id }}"
+      type="text"
+      class="rental-picker__input"
+      placeholder="{{ 'rental_picker.select_date' | t }}"
+      autocomplete="off"
+      readonly
+    />
+    <span class="rental-picker__icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3.5" y="5" width="17" height="15.5" rx="2"></rect>
+        <path d="M8 3.5v3M16 3.5v3M3.5 10h17"></path>
+      </svg>
+    </span>
+  </div>
+  <p class="rental-picker__meta" data-rental-meta></p>
+  <p class="rental-picker__error" data-rental-error hidden></p>
+  <div class="rental-picker__summary">
+    <div>
+      {{ 'rental_picker.duration_label' | t }}:
+      <strong data-rental-duration-display>—</strong>
+    </div>
+    <div>
+      {{ 'rental_picker.end_label' | t }}:
+      <strong data-rental-end-display>—</strong>
+    </div>
+  </div>
+
+  {% form 'product', product, class: 'rental-picker__form', data-rental-form: '' %}
+    <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}" data-rental-variant-id />
+    <input type="hidden" name="quantity" value="1" />
+    <input type="hidden" name="properties[Rental Start]" value="" data-rental-start-prop />
+    <input type="hidden" name="properties[Rental End]" value="" data-rental-end-prop />
+    <input type="hidden" name="properties[Duration]" value="" data-rental-duration-prop />
+    <input type="hidden" name="properties[Refundable Security deposit]" value="" data-rental-deposit-prop />
+    <button
+      type="submit"
+      class="rental-picker__cta"
+      data-rental-submit
+      disabled
+    >
+      {{ 'rental_picker.cta' | t }}
+    </button>
+  {% endform %}
+
+  <div class="rental-picker__backdrop" data-rental-backdrop hidden>
+    <div class="rental-picker__sheet" data-rental-sheet></div>
+  </div>
+</div>
+
+{{ 'flatpickr.min.css' | asset_url | stylesheet_tag }}
+{{ 'rental-picker.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'flatpickr.min.js' | asset_url }}" defer></script>
+<script src="{{ 'rental-picker.js' | asset_url }}" defer></script>
+
+<style>
+  {% if block.settings.hide_theme_atc %}
+    form[action*="/cart/add"]:not([data-rental-form]) [type="submit"] { display: none !important; }
+  {% endif %}
+</style>
+
+{% schema %}
+{
+  "name": "Rental picker",
+  "target": "section",
+  "enabled_on": {
+    "templates": ["product"]
+  },
+  "settings": [
+    {
+      "type": "text",
+      "id": "proxy_base",
+      "label": "App proxy base",
+      "default": "/apps/rental"
+    },
+    {
+      "type": "checkbox",
+      "id": "hide_theme_atc",
+      "label": "Hide theme's default add-to-cart button",
+      "default": true
+    }
+  ]
+}
+{% endschema %}

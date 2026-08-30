@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model Shop {
+  id          String   @id @default(cuid())
+  shopDomain  String   @unique
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  settings    Settings?
+  rentalUnits RentalUnit[]
+  bookings    Booking[]
+}
+
+model Settings {
+  id                       String   @id @default(cuid())
+  shopId                   String   @unique
+  defaultBufferBefore      Int      @default(0)
+  defaultBufferAfter       Int      @default(0)
+  reminderDaysBefore       Int      @default(2)
+  reminderChannelCustomer  String   @default("email")
+  reminderChannelMerchant  String   @default("email")
+  fromEmail                String?
+  merchantEmail            String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  shop                     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+model RentalUnit {
+  id                 String   @id @default(cuid())
+  shopId             String
+  productId          String
+  productTitle       String?
+  variantId          String
+  variantTitle       String?
+  quantity           Int      @default(1)
+  bufferDaysBefore   Int?
+  bufferDaysAfter    Int?
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  shop               Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  bookings           Booking[]
+
+  @@unique([shopId, productId, variantId])
+  @@index([shopId, productId])
+  @@index([shopId, variantId])
+}
+
+model Booking {
+  id                     String   @id @default(cuid())
+  shopId                 String
+  rentalUnitId           String
+  variantId              String?
+  orderId                String?
+  orderName              String?
+  lineItemId             String?
+  customerId             String?
+  customerEmail          String?
+  startDate              DateTime
+  endDate                DateTime
+  blockStart             DateTime
+  blockEnd               DateTime
+  status                 String   @default("pending")
+  reminderDeliverySent   Boolean  @default(false)
+  reminderPickupSent     Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  shop                   Shop        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  rentalUnit             RentalUnit  @relation(fields: [rentalUnitId], references: [id], onDelete: Cascade)
+
+  @@index([rentalUnitId, blockEnd])
+  @@index([shopId, status])
+  @@index([shopId, startDate])
+  @@index([shopId, endDate])
+}

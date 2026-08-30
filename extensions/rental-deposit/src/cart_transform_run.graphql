@@ -1,0 +1,42 @@
+query CartTransformRunInput {
+  presentmentCurrencyRate
+  cart {
+    lines {
+      id
+      quantity
+      rentalStart: attribute(key: "Rental Start") {
+        value
+      }
+      cost {
+        amountPerQuantity {
+          amount
+          currencyCode
+        }
+      }
+      sellingPlanAllocation {
+        sellingPlan {
+          id
+        }
+      }
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          id
+          product {
+            id
+            title
+            isRental: hasAnyTag(tags: ["rental", "rent"])
+            securityDeposit: metafield(namespace: "$app", key: "security_deposit") {
+              jsonValue
+            }
+          }
+        }
+      }
+    }
+  }
+  shop {
+    depositVariant: metafield(namespace: "$app", key: "deposit_variant") {
+      jsonValue
+    }
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "payload": {
+    "export": "cart-transform-run",
+    "target": "cart.transform.run",
+    "input": {
+      "presentmentCurrencyRate": "1.0",
+      "cart": {
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 1,
+            "rentalStart": {
+              "value": "2026-09-23"
+            },
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "258.39",
+                "currencyCode": "USD"
+              }
+            },
+            "sellingPlanAllocation": null,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/111",
+              "product": {
+                "id": "gid://shopify/Product/11",
+                "title": "Beige Embroidered Woven Kurta Pyjama for Wedding",
+                "isRental": true,
+                "securityDeposit": null
+              }
+            }
+          }
+        ]
+      },
+      "shop": {
+        "depositVariant": {
+          "jsonValue": "gid://shopify/ProductVariant/999"
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "lineExpand": {
+            "cartLineId": "gid://shopify/CartLine/1",
+            "expandedCartItems": [
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/111",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "258.39"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "Refundable Security deposit",
+                    "value": "$181.00"
+                  }
+                ]
+              },
+              {
+                "merchandiseId": "gid://shopify/ProductVariant/999",
+                "quantity": 1,
+                "price": {
+                  "adjustment": {
+                    "fixedPricePerUnit": {
+                      "amount": "181.00"
+                    }
+                  }
+                },
+                "attributes": [
+                  {
+                    "key": "_deposit",
+                    "value": "true"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

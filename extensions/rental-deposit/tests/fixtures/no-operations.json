@@ -1,0 +1,43 @@
+{
+  "payload": {
+    "export": "cart-transform-run",
+    "target": "cart.transform.run",
+    "input": {
+      "presentmentCurrencyRate": "1.0",
+      "cart": {
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 1,
+            "rentalStart": null,
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "50.00",
+                "currencyCode": "USD"
+              }
+            },
+            "sellingPlanAllocation": null,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/111",
+              "product": {
+                "id": "gid://shopify/Product/11",
+                "title": "Regular shirt",
+                "isRental": false,
+                "securityDeposit": null
+              }
+            }
+          }
+        ]
+      },
+      "shop": {
+        "depositVariant": {
+          "jsonValue": "gid://shopify/ProductVariant/999"
+        }
+      }
+    },
+    "output": {
+      "operations": []
+    }
+  }
+}

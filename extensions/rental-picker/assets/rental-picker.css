@@ -1,0 +1,596 @@
+.rental-picker {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.rental-picker__label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.rental-picker__field {
+  position: relative;
+  display: block;
+}
+
+.rental-picker__field .rental-picker__input,
+.rental-picker__field input.rental-picker__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 42px 10px 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+  background: #fff;
+  color: #1a1a1a;
+  font-size: 15px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.rental-picker__field .rental-picker__input:focus,
+.rental-picker__field input.rental-picker__input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px #3b82f6;
+}
+
+.rental-picker__icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  transform: translateY(-50%);
+  color: #6b6b6b;
+  pointer-events: none;
+}
+
+.rental-picker__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.rental-picker__meta {
+  color: #666;
+  font-size: 13px;
+  margin: 0;
+}
+
+.rental-picker__error {
+  color: #b42318;
+  font-size: 13px;
+  margin: 0;
+}
+
+.rental-picker__error[hidden] {
+  display: none;
+}
+
+.rental-picker__input.is-error,
+.rental-picker__field .rental-picker__input.is-error {
+  border-color: #b42318;
+}
+
+.rental-picker__summary {
+  color: #111;
+  font-size: 14px;
+  display: grid;
+  gap: 4px;
+}
+
+.rental-picker__cta {
+  padding: 10px 16px;
+  border-radius: 6px;
+  border: 0;
+  background: #111;
+  color: #fff;
+  cursor: pointer;
+}
+
+.rental-picker__cta[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rental-picker__backdrop {
+  display: none;
+}
+
+body.rental-picker-lock {
+  overflow: hidden;
+}
+
+.rental-picker-calendar {
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  padding: 16px 16px 12px;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.14);
+  font-family: inherit;
+  z-index: 100000;
+  isolation: isolate;
+}
+
+.rental-picker-calendar.open,
+.rental-picker-calendar.inline {
+  max-height: none;
+}
+
+.rental-picker-calendar:before,
+.rental-picker-calendar:after {
+  display: none;
+}
+
+.rental-picker-calendar .flatpickr-months {
+  position: relative;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.rental-picker-calendar .flatpickr-months .flatpickr-month {
+  height: 36px;
+  overflow: visible;
+}
+
+.rental-picker-calendar .flatpickr-current-month {
+  position: relative;
+  left: auto;
+  width: auto;
+  height: 36px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.rental-picker-calendar .flatpickr-current-month .flatpickr-monthDropdown-months {
+  font-weight: 700;
+  font-size: 16px;
+  color: #1a1a1a;
+  padding: 0 4px 0 0;
+  margin: 0;
+}
+
+.rental-picker-calendar .flatpickr-current-month input.cur-year {
+  font-weight: 700;
+  font-size: 16px;
+  color: #1a1a1a;
+  padding: 0;
+  width: 5ch;
+}
+
+.rental-picker-calendar .numInputWrapper {
+  width: auto;
+}
+
+.rental-picker-calendar .numInputWrapper span {
+  display: none !important;
+}
+
+.rental-picker-calendar .flatpickr-months .flatpickr-prev-month,
+.rental-picker-calendar .flatpickr-months .flatpickr-next-month {
+  top: 0;
+  transform: none;
+  height: 36px;
+  padding: 8px;
+  color: #b0b0b0;
+  fill: #b0b0b0;
+}
+
+.rental-picker-calendar .flatpickr-months .flatpickr-prev-month:hover,
+.rental-picker-calendar .flatpickr-months .flatpickr-next-month:hover,
+.rental-picker-calendar .flatpickr-months .flatpickr-prev-month:hover svg,
+.rental-picker-calendar .flatpickr-months .flatpickr-next-month:hover svg {
+  color: #1a1a1a;
+  fill: #1a1a1a;
+}
+
+.rental-picker-calendar .flatpickr-weekdays {
+  height: 28px;
+  margin-bottom: 4px;
+}
+
+.rental-picker-calendar span.flatpickr-weekday {
+  color: #9b9b9b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.rental-picker-calendar .flatpickr-innerContainer,
+.rental-picker-calendar .flatpickr-innerContainer:focus {
+  overflow: visible;
+}
+
+.rental-picker-calendar .flatpickr-rContainer {
+  display: block;
+  width: 100%;
+}
+
+.rental-picker-calendar .flatpickr-days {
+  width: 100% !important;
+  overflow: visible;
+}
+
+.rental-picker-calendar .dayContainer {
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  padding: 0;
+}
+
+.rental-picker-calendar .dayContainer + .dayContainer {
+  box-shadow: none;
+}
+
+.rental-picker-calendar .flatpickr-day {
+  position: relative;
+  z-index: 1;
+  max-width: none;
+  height: 40px;
+  line-height: 40px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #1a1a1a;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.rental-picker-calendar .flatpickr-day:hover,
+.rental-picker-calendar .flatpickr-day:focus,
+.rental-picker-calendar .flatpickr-day.prevMonthDay:hover,
+.rental-picker-calendar .flatpickr-day.nextMonthDay:hover {
+  background: transparent;
+  border-color: transparent;
+  color: #1a1a1a;
+}
+
+.rental-picker-calendar .flatpickr-day.today {
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.rental-picker-calendar .flatpickr-day.today:hover,
+.rental-picker-calendar .flatpickr-day.today:focus {
+  background: transparent;
+  color: inherit;
+  border-color: transparent;
+}
+
+.rental-picker-calendar .flatpickr-day.prevMonthDay,
+.rental-picker-calendar .flatpickr-day.nextMonthDay {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.rental-picker-calendar .flatpickr-day.flatpickr-disabled,
+.rental-picker-calendar .flatpickr-day.flatpickr-disabled:hover {
+  color: #c4c4c4;
+  text-decoration: line-through;
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.rental-picker-calendar .flatpickr-day.inRange,
+.rental-picker-calendar .flatpickr-day.prevMonthDay.inRange,
+.rental-picker-calendar .flatpickr-day.nextMonthDay.inRange,
+.rental-picker-calendar .flatpickr-day.today.inRange {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: #1a1a1a;
+  border-radius: 0;
+}
+
+.rental-picker-calendar .flatpickr-day.selected,
+.rental-picker-calendar .flatpickr-day.startRange,
+.rental-picker-calendar .flatpickr-day.endRange,
+.rental-picker-calendar .flatpickr-day.selected:hover,
+.rental-picker-calendar .flatpickr-day.startRange:hover,
+.rental-picker-calendar .flatpickr-day.endRange:hover,
+.rental-picker-calendar .flatpickr-day.selected:focus,
+.rental-picker-calendar .flatpickr-day.startRange:focus,
+.rental-picker-calendar .flatpickr-day.endRange:focus {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: #fff;
+}
+
+.rental-picker-calendar .flatpickr-day.inRange::before,
+.rental-picker-calendar .flatpickr-day.startRange:not(.endRange)::before,
+.rental-picker-calendar .flatpickr-day.endRange:not(.startRange)::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  height: 36px;
+  transform: translateY(-50%);
+  background: #ececec;
+  z-index: -1;
+}
+
+.rental-picker-calendar .flatpickr-day.inRange::before {
+  left: 0;
+  right: 0;
+}
+
+.rental-picker-calendar .flatpickr-day.startRange:not(.endRange)::before {
+  left: 50%;
+  right: 0;
+}
+
+.rental-picker-calendar .flatpickr-day.endRange:not(.startRange)::before {
+  left: 0;
+  right: 50%;
+}
+
+.rental-picker-calendar .flatpickr-day.startRange:nth-child(7n)::before,
+.rental-picker-calendar .flatpickr-day.endRange:nth-child(7n + 1)::before {
+  content: none;
+}
+
+.rental-picker-calendar .flatpickr-day.inRange:nth-child(7n)::before {
+  border-radius: 0 18px 18px 0;
+}
+
+.rental-picker-calendar .flatpickr-day.inRange:nth-child(7n + 1)::before {
+  border-radius: 18px 0 0 18px;
+}
+
+.rental-picker-calendar .flatpickr-day.selected::after,
+.rental-picker-calendar .flatpickr-day.startRange::after,
+.rental-picker-calendar .flatpickr-day.endRange::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 36px;
+  height: 36px;
+  transform: translate(-50%, -50%);
+  background: #2c2c2c;
+  border-radius: 50%;
+  z-index: -1;
+}
+
+.rental-picker-calendar .flatpickr-day.flatpickr-disabled.inRange,
+.rental-picker-calendar .flatpickr-day.flatpickr-disabled.selected,
+.rental-picker-calendar .flatpickr-day.flatpickr-disabled.startRange,
+.rental-picker-calendar .flatpickr-day.flatpickr-disabled.endRange {
+  text-decoration: none;
+  color: #1a1a1a;
+}
+
+.rental-picker-calendar .flatpickr-day.flatpickr-disabled.selected,
+.rental-picker-calendar .flatpickr-day.flatpickr-disabled.startRange,
+.rental-picker-calendar .flatpickr-day.flatpickr-disabled.endRange {
+  color: #fff;
+}
+
+.rental-picker-cal__footer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 4px 4px;
+}
+
+.rental-picker-cal__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  order: -1;
+}
+
+.rental-picker-cal__duration {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.rental-picker-cal__duration-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #1a1a1a;
+}
+
+.rental-picker-cal__duration-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: #2c2c2c;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.rental-picker-cal__clear {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 8px 4px;
+  color: #1a1a1a;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.rental-picker-cal__save {
+  appearance: none;
+  border: 0;
+  background: #2c2c2c;
+  color: #fff;
+  padding: 10px 22px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rental-picker-cal__mobile-bar {
+  display: none;
+}
+
+@media (max-width: 749px) {
+  .rental-picker__backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.28);
+  }
+
+  .rental-picker__backdrop.is-open {
+    display: flex;
+  }
+
+  .rental-picker__sheet {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: min(420px, 100%);
+    height: min(85vh, 640px);
+    max-height: 85vh;
+    background: #fff;
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+  }
+
+  .rental-picker-calendar--mobile,
+  .rental-picker-calendar--mobile.open {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    width: 100% !important;
+    max-width: none;
+    height: 100% !important;
+    max-height: 100% !important;
+    display: flex !important;
+    flex-direction: column;
+    padding: 8px 12px 8px;
+    border-radius: 24px;
+    box-shadow: none;
+    overflow: hidden;
+  }
+
+  .rental-picker-calendar--mobile .rental-picker-cal__mobile-bar {
+    display: grid;
+    grid-template-columns: 36px 1fr 36px;
+    align-items: center;
+    flex: 0 0 auto;
+    padding: 8px 4px 12px;
+  }
+
+  .rental-picker-calendar--mobile .rental-picker-cal__mobile-title {
+    text-align: center;
+    font-size: 16px;
+    font-weight: 700;
+    color: #1a1a1a;
+  }
+
+  .rental-picker-cal__close {
+    appearance: none;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 50%;
+    background: #efefef;
+    color: #1a1a1a;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .rental-picker-cal__close svg {
+    width: 12px;
+    height: 12px;
+    display: block;
+  }
+
+  .rental-picker-calendar--mobile .flatpickr-months,
+  .rental-picker-calendar--mobile .flatpickr-prev-month,
+  .rental-picker-calendar--mobile .flatpickr-next-month {
+    display: none;
+  }
+
+  .rental-picker-calendar--mobile .flatpickr-innerContainer {
+    display: block;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .rental-picker-calendar--mobile .flatpickr-weekdays {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: #fff;
+    height: 32px;
+    margin: 0;
+  }
+
+  .rental-picker-calendar--mobile .flatpickr-weekdaycontainer:not(:first-child) {
+    display: none;
+  }
+
+  .rental-picker-calendar--mobile .flatpickr-days {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .rental-picker-calendar--mobile .dayContainer {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 0 8px;
+  }
+
+  .rental-picker-calendar--mobile .dayContainer::before {
+    content: attr(data-month-label);
+    flex: 0 0 100%;
+    max-width: 100%;
+    padding: 18px 0 10px;
+    text-align: center;
+    font-size: 16px;
+    font-weight: 700;
+    color: #1a1a1a;
+    line-height: 1.2;
+  }
+
+  .rental-picker-calendar--mobile .dayContainer:first-child::before {
+    content: none;
+    display: none;
+    padding: 0;
+    flex-basis: 0;
+  }
+
+  .rental-picker-calendar--mobile .rental-picker-cal__footer {
+    flex: 0 0 auto;
+    padding: 8px 8px 12px;
+  }
+
+  .rental-picker-calendar--mobile .rental-picker-cal__actions {
+    order: 0;
+  }
+}
