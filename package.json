@@ -68,9 +68,5 @@
   "overrides": {
     "p-map": "^4.0.0"
   },
-  "author": "rahulyadav",
-  "optionalDependencies": {
-    "@emnapi/core": "1.11.3",
-    "@emnapi/runtime": "1.11.3"
-  }
+  "author": "rahulyadav"
 }

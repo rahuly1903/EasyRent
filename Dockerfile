@@ -1,5 +1,7 @@
-FROM node:20-alpine
+FROM node:20.19-alpine
 RUN apk add --no-cache openssl
+# Pin npm to the lockfile's generator so `npm ci` stays in sync on Alpine.
+RUN npm install -g npm@11.6.2
 
 EXPOSE 3000
 
@@ -8,7 +10,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY extensions ./extensions
 
-RUN npm install && npm cache clean --force
+RUN npm ci && npm cache clean --force
 
 COPY . .
 RUN npm run build
