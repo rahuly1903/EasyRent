@@ -2,12 +2,11 @@
 
 client_id = "243e06d37700f48ee08ed7ee37e8bcea"
 name = "EasyRent"
-application_url = "https://example.com"
+application_url = "https://easyrent.up.railway.app/"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
-include_config_on_deploy = true
 
 [webhooks]
 api_version = "2026-10"
@@ -68,9 +67,9 @@ name = "Security deposit variant"
 access.admin = "merchant_read"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://easyrent.up.railway.app/api/auth" ]
 
 [app_proxy]
-url = "https://example.com/proxy"
+url = "https://easyrent.up.railway.app/proxy"
 subpath = "rental"
 prefix = "apps"
