@@ -1,5 +1,8 @@
 import { getOrCreateShop } from "./shop.server";
 import { syncProductUnits, deactivateProductUnits } from "./rental-unit.server";
+import prisma from "../db.server";
+
+export const RENT_TAG = "rent";
 
 const PRODUCT_QUERY = `#graphql
   query GetProduct($id: ID!) {
@@ -7,7 +10,6 @@ const PRODUCT_QUERY = `#graphql
       id
       title
       tags
-      collections(first: 25) { nodes { handle } }
       variants(first: 100) {
         nodes {
           id
@@ -16,6 +18,23 @@ const PRODUCT_QUERY = `#graphql
           rentableQuantity: metafield(key: "rentable_quantity") {
             jsonValue
           }
+        }
+      }
+    }
+  }
+`;
+
+const RENT_UNITS_QUERY = `#graphql
+  query RentTaggedProductUnits($cursor: String) {
+    products(first: 250, query: "tag:rent", after: $cursor) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        id
+        variantsCount {
+          count
         }
       }
     }
@@ -31,12 +50,56 @@ async function adminGraphql(admin, query, variables) {
   return body.data;
 }
 
-function isRentalProduct(node) {
+export function isRentalProduct(node) {
   if (!node) return false;
-  const tags = (node.tags || []).map((t) => t.toLowerCase());
-  if (tags.includes("rental") || tags.includes("rent")) return true;
-  const handles = (node.collections?.nodes || []).map((c) => (c.handle || "").toLowerCase());
-  return handles.includes("rentals");
+  return (node.tags || []).some((tag) => String(tag).toLowerCase() === RENT_TAG);
+}
+
+export async function countActiveRentalUnits(admin, shopId) {
+  if (!admin) return 0;
+
+  let cursor = null;
+  let total = 0;
+  const rentProductIds = [];
+
+  do {
+    const data = await adminGraphql(
+      admin,
+      RENT_UNITS_QUERY,
+      cursor ? { cursor } : { cursor: null },
+    );
+    const connection = data?.products;
+    for (const node of connection?.nodes || []) {
+      if (node?.id) rentProductIds.push(node.id);
+      const n = Number(node?.variantsCount?.count);
+      total += Number.isFinite(n) ? n : 0;
+    }
+    cursor = connection?.pageInfo?.hasNextPage ? connection.pageInfo.endCursor : null;
+  } while (cursor);
+
+  if (shopId) {
+    await deactivateUnitsNotIn(shopId, rentProductIds);
+  }
+
+  return total;
+}
+
+async function deactivateUnitsNotIn(shopId, productIds) {
+  if (!productIds.length) {
+    await prisma.rentalUnit.updateMany({
+      where: { shopId, active: true },
+      data: { active: false },
+    });
+    return;
+  }
+  await prisma.rentalUnit.updateMany({
+    where: {
+      shopId,
+      active: true,
+      productId: { notIn: productIds },
+    },
+    data: { active: false },
+  });
 }
 
 export async function syncOneProduct({ admin, shopDomain, productId }) {

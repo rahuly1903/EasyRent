@@ -4,12 +4,16 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { getOrCreateShop } from "../services/shop.server";
 import { dashboardBuckets } from "../services/booking.server";
+import { countActiveRentalUnits } from "../services/sync.server";
 
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop);
   const [unitCount, bookingCount, buckets] = await Promise.all([
-    prisma.rentalUnit.count({ where: { shopId: shop.id, active: true } }),
+    countActiveRentalUnits(admin, shop.id).catch((e) => {
+      console.error("[app] rental unit count", e);
+      return prisma.rentalUnit.count({ where: { shopId: shop.id, active: true } });
+    }),
     prisma.booking.count({ where: { shopId: shop.id, status: { not: "cancelled" } } }),
     dashboardBuckets(shop.id),
   ]);
@@ -51,8 +55,7 @@ export default function Index() {
       <s-section heading="Get started">
         <s-unordered-list>
           <s-list-item>
-            Tag rental products with <s-text type="strong">rental</s-text>, or add them to a
-            collection with handle <s-text type="strong">rentals</s-text>
+            Tag rental products with <s-text type="strong">rent</s-text>
           </s-list-item>
           <s-list-item>
             Set <s-text type="strong">Rentable quantity</s-text> on each variant in Shopify.
