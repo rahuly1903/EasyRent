@@ -1,7 +1,6 @@
 const ensuredShops = new Set();
 const DEPOSIT_HANDLE = "refundable-security-deposit";
 const DEPOSIT_TITLE = "Refundable Security deposit";
-const FUNCTION_HANDLE = "rental-deposit";
 
 const SETUP_QUERY = `#graphql
   query DepositSetup {
@@ -66,31 +65,6 @@ const SET_METAFIELDS = `#graphql
   }
 `;
 
-const CART_TRANSFORMS_QUERY = `#graphql
-  query CartTransforms {
-    cartTransforms(first: 10) {
-      nodes {
-        id
-        functionId
-      }
-    }
-  }
-`;
-
-const CREATE_CART_TRANSFORM = `#graphql
-  mutation CreateCartTransform($functionHandle: String!, $blockOnFailure: Boolean) {
-    cartTransformCreate(functionHandle: $functionHandle, blockOnFailure: $blockOnFailure) {
-      cartTransform {
-        id
-      }
-      userErrors {
-        field
-        message
-      }
-    }
-  }
-`;
-
 export async function ensureRentalDepositSetup(admin, shopDomain) {
   if (!admin) return;
   if (shopDomain && ensuredShops.has(shopDomain)) return;
@@ -105,7 +79,8 @@ export async function ensureRentalDepositSetup(admin, shopDomain) {
   }
 
   await setShopDepositVariant(admin, shopId, variantId);
-  await ensureCartTransform(admin);
+  // Cart Transform (Shopify Function) is not registered: custom apps can only
+  // activate functions on Shopify Plus or development stores.
 
   if (shopDomain) ensuredShops.add(shopDomain);
 }
@@ -169,29 +144,6 @@ async function setShopDepositVariant(admin, shopId, variantId) {
   if (errors.length) {
     throw new Error(errors.map((e) => e.message).join("; "));
   }
-}
-
-async function ensureCartTransform(admin) {
-  const existing = await adminGraphql(admin, CART_TRANSFORMS_QUERY);
-  if (existing?.cartTransforms?.nodes?.length) return;
-
-  try {
-    const data = await adminGraphql(admin, CREATE_CART_TRANSFORM, {
-      functionHandle: FUNCTION_HANDLE,
-      blockOnFailure: false,
-    });
-    const errors = data?.cartTransformCreate?.userErrors || [];
-    if (errors.length && !isAlreadyRegistered(errors.map((e) => e.message).join(" "))) {
-      throw new Error(errors.map((e) => e.message).join("; "));
-    }
-  } catch (e) {
-    if (isAlreadyRegistered(e?.message)) return;
-    throw e;
-  }
-}
-
-function isAlreadyRegistered(message) {
-  return /already|taken|exists|duplicate|more than 1/i.test(String(message || ""));
 }
 
 function gidFromJson(value) {

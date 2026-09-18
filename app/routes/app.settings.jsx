@@ -55,8 +55,9 @@ export default function SettingsPage() {
             <s-paragraph>
               These buffers apply to all rental products. Rentable quantity is set on each
               product variant in Shopify (Rentable quantity metafield). Leave that field empty
-              to default to 1. Security deposit is a product metafield (Rental security deposit);
-              leave it empty to charge 70% of the rental price, rounded.
+              to default to 1. Security deposit is a product metafield (Rental security deposit)
+              and is recorded on the line as a property. Automatic deposit charging via Cart
+              Transform is disabled because Shopify Functions are not available for this custom app.
             </s-paragraph>
             <s-grid gridTemplateColumns="1fr 1fr" gap="base">
               <s-number-field
