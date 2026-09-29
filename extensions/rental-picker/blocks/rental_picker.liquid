@@ -9,7 +9,11 @@
 %}
 
 {% if is_rent_product %}
-  {% assign proxy_base = block.settings.proxy_base | default: '/apps/rental' %}
+  {% liquid
+    assign proxy_base = block.settings.proxy_base | default: '/apps/rental'
+    assign deposit_percent = block.settings.deposit_percent | default: 70
+    assign security_product = block.settings.security_product
+  %}
   <div
     class="rental-picker"
     data-rental-picker
@@ -18,6 +22,8 @@
     data-shop="{{ shop.permanent_domain }}"
     data-product-id="{{ product.id }}"
     data-product-handle="{{ product.handle }}"
+    data-cart-add-url="{{ routes.cart_add_url }}"
+    data-cart-url="{{ routes.cart_url }}"
     data-msg-unavailable="{{ 'rental_picker.unavailable' | t | escape }}"
     data-msg-available="{{ 'rental_picker.all_available' | t | escape }}"
     data-msg-overlap="{{ 'rental_picker.overlap_error' | t | escape }}"
@@ -26,6 +32,9 @@
     data-msg-clear="{{ 'rental_picker.clear' | t | escape }}"
     data-msg-save="{{ 'rental_picker.save' | t | escape }}"
     data-msg-close="{{ 'rental_picker.close' | t | escape }}"
+    data-msg-deposit-missing="{{ 'rental_picker.deposit_missing' | t | escape }}"
+    data-msg-deposit-product="{{ 'rental_picker.deposit_product_missing' | t | escape }}"
+    data-msg-cart-error="{{ 'rental_picker.cart_error' | t | escape }}"
   >
     <script type="application/json" data-rental-config>
       {
@@ -48,6 +57,26 @@
           {%- endfor -%}
         ],
         "securityDeposit": {% if product.metafields.app.security_deposit.value.amount %}{{ product.metafields.app.security_deposit.value.amount | json }}{% else %}null{% endif %},
+        "depositPercent": {{ deposit_percent | json }},
+        "securityProduct": {% if security_product != blank %}{
+          "id": {{ security_product.id | json }},
+          "title": {{ security_product.title | json }},
+          "handle": {{ security_product.handle | json }},
+          "variants": [
+            {%- for variant in security_product.variants -%}
+              {
+                "id": {{ variant.id | json }},
+                "title": {{ variant.title | json }},
+                "price": {{ variant.price | json }},
+                "available": {{ variant.available | json }},
+                "option1": {{ variant.option1 | json }},
+                "option2": {{ variant.option2 | json }},
+                "option3": {{ variant.option3 | json }}
+              }{% unless forloop.last %},{% endunless %}
+            {%- endfor -%}
+          ]
+        }{% else %}null{% endif %},
+        "productTitle": {{ product.title | json }},
         "moneyFormat": {{ shop.money_format | json }}
       }
     </script>
@@ -81,6 +110,10 @@
       <div>
         {{ 'rental_picker.end_label' | t }}:
         <strong data-rental-end-display>—</strong>
+      </div>
+      <div>
+        {{ 'rental_picker.deposit_label' | t }}:
+        <strong data-rental-deposit-display>—</strong>
       </div>
     </div>
 
@@ -141,6 +174,19 @@
       "id": "hide_theme_atc",
       "label": "Hide theme's default add-to-cart button",
       "default": true
+    },
+    {
+      "type": "product",
+      "id": "security_product",
+      "label": "Security deposit product",
+      "info": "Publish this product to the Online Store. Each variant should be priced at a multiple of 10. Rent now adds the variant whose price matches the deposit."
+    },
+    {
+      "type": "number",
+      "id": "deposit_percent",
+      "label": "Security deposit percent",
+      "default": 70,
+      "info": "Percent of the rental variant price. The result is rounded to the nearest 10."
     }
   ]
 }

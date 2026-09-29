@@ -42,6 +42,7 @@
     const endProp = root.querySelector("[data-rental-end-prop]");
     const durationProp = root.querySelector("[data-rental-duration-prop]");
     const depositProp = root.querySelector("[data-rental-deposit-prop]");
+    const depositDisplay = root.querySelector("[data-rental-deposit-display]");
     const variantIdInput = root.querySelector("[data-rental-variant-id]");
     const msgUnavailable = root.getAttribute("data-msg-unavailable") || "Grey dates are unavailable because they overlap an existing booking.";
     const msgAvailable = root.getAttribute("data-msg-available") || "All dates available";
@@ -51,6 +52,9 @@
     const msgClear = root.getAttribute("data-msg-clear") || "Clear";
     const msgSave = root.getAttribute("data-msg-save") || "Save";
     const msgClose = root.getAttribute("data-msg-close") || "Close";
+    const msgDepositMissing = root.getAttribute("data-msg-deposit-missing") || "No security deposit variant is priced at {{amount}}.";
+    const msgDepositProduct = root.getAttribute("data-msg-deposit-product") || "Choose a security deposit product in the rental picker settings.";
+    const msgCartError = root.getAttribute("data-msg-cart-error") || "Could not add the rental to the cart. Try again.";
     const backdrop = root.querySelector("[data-rental-backdrop]");
     const sheet = root.querySelector("[data-rental-sheet]");
     const mobileQuery = window.matchMedia("(max-width: 749px)");
@@ -392,6 +396,10 @@
       if (state.end && endProp) endProp.value = ymd(state.end);
       else if (endProp) endProp.value = "";
       if (depositProp) depositProp.value = depositPropertyValue(state.variantId, config);
+      if (depositDisplay) {
+        const amount = depositAmountForVariant(state.variantId, config);
+        depositDisplay.textContent = amount > 0 ? formatMoney(amount, config.moneyFormat) : "—";
+      }
       if (durationDisplay) durationDisplay.textContent = durationText();
       updateCalDuration(picker);
       if (endDisplay) endDisplay.textContent = state.end ? ymd(state.end) : "—";
@@ -400,13 +408,82 @@
       else showError("");
     }
 
+    let adding = false;
     if (form) {
       form.addEventListener("submit", (e) => {
-        if (!state.start || isStartBlocked(state.start) || state.availabilityError) {
-          e.preventDefault();
-          showError(state.availabilityError ? msgAvailError : msgOverlap);
-        }
+        e.preventDefault();
+        addRentalAndDeposit();
       });
+    }
+
+    async function addRentalAndDeposit() {
+      if (adding) return;
+      const overlapping = !!(state.start && isStartBlocked(state.start));
+      if (!state.start || overlapping || state.availabilityError) {
+        showError(state.availabilityError ? msgAvailError : msgOverlap);
+        return;
+      }
+      const cents = depositCentsForVariant(state.variantId, config);
+      const amount = cents / 100;
+      const depositVariant = cents > 0 ? findSecurityVariant(cents, config) : null;
+      if (cents > 0 && !config.securityProduct) {
+        showError(msgDepositProduct);
+        return;
+      }
+      if (cents > 0 && !depositVariant) {
+        showError(msgDepositMissing.replace("{{amount}}", formatMoney(amount, config.moneyFormat)));
+        return;
+      }
+      const rentalLink = String(Date.now());
+      const productTitle = config.productTitle || "";
+      const rentVariant = (config.variants || []).find(
+        (item) => normalizeVariantId(item.id) === normalizeVariantId(state.variantId),
+      );
+      const rentPrice = formatMoney((Number(rentVariant?.price) || 0) / 100, config.moneyFormat);
+      const properties = {
+        "Rental Start": ymd(state.start),
+        "Rental End": state.end ? ymd(state.end) : "",
+        Duration: durationText(),
+        _rental_link: rentalLink,
+      };
+      if (amount > 0) properties["Refundable Security deposit"] = formatMoney(amount, config.moneyFormat);
+      const items = [
+        {
+          id: Number(state.variantId) || state.variantId,
+          quantity: 1,
+          properties,
+        },
+      ];
+      if (depositVariant) {
+        items.push({
+          id: Number(depositVariant.id) || depositVariant.id,
+          quantity: 1,
+          properties: {
+            _deposit: "true",
+            _rental_link: rentalLink,
+            _display_title: `Security deposit for '${productTitle}'`,
+            Title: productTitle,
+            Price: rentPrice,
+            Duration: durationText(),
+          },
+        });
+      }
+      adding = true;
+      if (submit) submit.disabled = true;
+      try {
+        const payload = await postCartItems(root, items);
+        const openedDrawer = openThemeCart(payload);
+        if (!openedDrawer) {
+          window.location.href = root.getAttribute("data-cart-url") || "/cart";
+          return;
+        }
+        if (submit) submit.disabled = false;
+      } catch (err) {
+        showError(err?.message || msgCartError);
+        if (submit) submit.disabled = false;
+      } finally {
+        adding = false;
+      }
     }
 
     function readVariant(id) {
@@ -453,6 +530,9 @@
         optionNames: normalizeOptionNames(fromScript.optionNames),
         variants: fromScript.variants || [],
         securityDeposit: parseMoneyAmount(fromScript.securityDeposit),
+        depositPercent: Number(fromScript.depositPercent) || 70,
+        securityProduct: fromScript.securityProduct || null,
+        productTitle: fromScript.productTitle || "",
         moneyFormat: fromScript.moneyFormat || "${{amount}}",
       };
     }
@@ -460,6 +540,9 @@
       optionNames: normalizeOptionNames(safeJson(root.getAttribute("data-option-names"))),
       variants: safeJson(root.getAttribute("data-variants")) || [],
       securityDeposit: parseMoneyAmount(root.getAttribute("data-security-deposit")),
+      depositPercent: 70,
+      securityProduct: null,
+      productTitle: "",
       moneyFormat: root.getAttribute("data-money-format") || "${{amount}}",
     };
   }
@@ -484,21 +567,99 @@
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  function variantPrice(variant) {
-    const raw = Number(variant?.price);
-    if (!Number.isFinite(raw) || raw <= 0) return 0;
-    return raw / 100;
+  function depositPercent(config) {
+    const rate = Number(config?.depositPercent);
+    return Number.isFinite(rate) && rate > 0 ? rate : 70;
+  }
+
+  function roundCentsToTen(cents) {
+    const amount = Math.round(Number(cents));
+    if (!Number.isFinite(amount) || amount <= 0) return 0;
+    const step = 1000;
+    return Math.round(amount / step) * step;
+  }
+
+  function depositCentsForVariant(variantId, config) {
+    const fromMetafield = config?.securityDeposit;
+    if (fromMetafield != null) {
+      if (!(fromMetafield > 0)) return 0;
+      return roundCentsToTen(Math.round(fromMetafield * 100));
+    }
+    const variant = (config?.variants || []).find((item) => normalizeVariantId(item.id) === normalizeVariantId(variantId));
+    const priceCents = Number(variant?.price);
+    if (!Number.isFinite(priceCents) || priceCents <= 0) return 0;
+    return roundCentsToTen(Math.round((priceCents * depositPercent(config)) / 100));
   }
 
   function depositAmountForVariant(variantId, config) {
-    const fromMetafield = config?.securityDeposit;
-    if (fromMetafield != null) {
-      return fromMetafield > 0 ? Math.round(fromMetafield * 100) / 100 : 0;
+    return depositCentsForVariant(variantId, config) / 100;
+  }
+
+  function findSecurityVariant(depositCents, config) {
+    const variants = config?.securityProduct?.variants || [];
+    const target = Math.round(Number(depositCents));
+    if (!variants.length || !(target > 0)) return null;
+    const priced = variants.filter((variant) => Number(variant.price) === target);
+    return priced.find((variant) => variant.available !== false) || priced[0] || null;
+  }
+
+  async function postCartItems(root, items) {
+    const drawer = document.querySelector("m-cart-drawer");
+    const rawUrl = root.getAttribute("data-cart-add-url") || "/cart/add";
+    const url = rawUrl.endsWith(".js") ? rawUrl : `${rawUrl}.js`;
+    const body = { items };
+    if (drawer && typeof drawer.getSectionsToRender === "function") {
+      body.sections = [...new Set(drawer.getSectionsToRender().map((section) => section.id))];
+      body.sections_url = window.location.pathname;
     }
-    const variant = (config?.variants || []).find((item) => normalizeVariantId(item.id) === normalizeVariantId(variantId));
-    const price = variantPrice(variant);
-    if (!(price > 0)) return 0;
-    return Math.round(price * 0.7);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.status) {
+      throw new Error(json.description || json.message || "Could not add the rental to the cart. Try again.");
+    }
+    return json;
+  }
+
+  function openThemeCart(payload) {
+    const drawer = document.querySelector("m-cart-drawer");
+    if (!drawer) return false;
+    try {
+      if (payload?.sections && typeof drawer.renderContents === "function") {
+        drawer.renderContents(payload);
+      } else if (typeof drawer.onCartDrawerUpdate === "function") {
+        drawer.onCartDrawerUpdate();
+        drawer.open();
+      } else if (typeof drawer.open === "function") {
+        drawer.open();
+      } else {
+        return false;
+      }
+    } catch (error) {
+      if (typeof drawer.onCartDrawerUpdate === "function") drawer.onCartDrawerUpdate();
+      if (typeof drawer.open === "function") drawer.open();
+    }
+    drawer.classList.remove("m-cart--empty");
+    const items = drawer.querySelector("m-cart-drawer-items");
+    items?.classList.remove("m-cart--empty");
+    if (window.MinimogTheme?.Notification && window.MinimogStrings?.itemAdded && items) {
+      window.MinimogTheme.Notification.show({
+        target: items,
+        method: "prepend",
+        type: "success",
+        message: window.MinimogStrings.itemAdded,
+        delay: 400,
+      });
+    }
+    window.MinimogEvents?.emit?.(window.MinimogTheme?.pubSubEvents?.cartUpdate, payload);
+    return true;
   }
 
   function formatMoney(amount, format) {

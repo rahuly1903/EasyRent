@@ -13,6 +13,10 @@
     "end_label": "Rental end date",
     "clear": "Clear",
     "save": "Save",
-    "close": "Close"
+    "close": "Close",
+    "deposit_label": "Security deposit",
+    "deposit_missing": "No security deposit variant is priced at {{amount}}.",
+    "deposit_product_missing": "Choose a security deposit product in the rental picker settings.",
+    "cart_error": "Could not add the rental to the cart. Try again."
   }
 }
