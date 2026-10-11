@@ -1,5 +1,5 @@
 import prisma from "../db.server";
-import { addDaysUtc, todayUtc, toUtcMidnight } from "../lib/dates";
+import { addDaysUtc, diffDaysUtc, todayUtc, toUtcMidnight } from "../lib/dates";
 import { resolveRentableQuantity } from "../lib/rentable-quantity";
 import { canBook, computeBlockWindow, resolveBuffers } from "./availability.server";
 import { findUnit } from "./rental-unit.server";
@@ -76,23 +76,45 @@ export async function createBookingsFromOrder({
         }
       }
 
-      const duration =
-        parseDurationValue(props.duration) ||
-        parseDurationValue(opts.duration) ||
-        parseDurationFromTitle(li.variantTitle) ||
-        1;
-
-      const result = await createBookingFromLineItem({
+      const dates = parseRentalDates(props.rentalDates);
+      const lineItemId = li.id ? String(li.id) : null;
+      const bookingInput = {
         shopId,
         productId: li.productId,
-        duration,
-        startDate: props.rentalStart,
         variantId: li.variantId,
         orderId: order.orderId,
         orderName: order.orderName,
-        lineItemId: li.id ? String(li.id) : null,
+        lineItemId,
         customerId: order.customerId,
         customerEmail: order.customerEmail,
+      };
+
+      if (dates.length) {
+        for (const date of dates) {
+          const result = await createBookingFromLineItem({
+            ...bookingInput,
+            duration: 1,
+            startDate: date,
+          });
+          if (result.skipped) {
+            console.warn(`${log} skip line ${li.id}: ${result.reason || "not a rental"}`);
+            skipped += 1;
+          } else if (result.created) {
+            console.log(`${log} created booking ${result.booking.id} line ${li.id} date=${date}`);
+            created += 1;
+          } else {
+            skipped += 1;
+          }
+        }
+        continue;
+      }
+
+      const duration = durationFromProps(props, opts, li);
+
+      const result = await createBookingFromLineItem({
+        ...bookingInput,
+        duration,
+        startDate: props.rentalStart,
       });
 
       if (result.skipped) {
@@ -129,9 +151,10 @@ export async function createBookingFromLineItem({
   customerId,
   customerEmail,
 }) {
-  if (orderId && lineItemId) {
+  const startKey = toUtcMidnight(startDate);
+  if (orderId && lineItemId && startKey) {
     const existing = await prisma.booking.findFirst({
-      where: { shopId, orderId, lineItemId },
+      where: { shopId, orderId, lineItemId, startDate: startKey },
     });
     if (existing) return { booking: existing, created: false };
   }
@@ -318,6 +341,7 @@ export function parseLineItemProps(properties) {
   return {
     rentalStart: map["rental start"] || map["rentalstart"] || map["rental_start"] || null,
     rentalEnd: map["rental end"] || map["rentalend"] || map["rental_end"] || null,
+    rentalDates: map["rental dates"] || map["rentaldates"] || map["rental_dates"] || null,
     duration: map["duration"] || map["rent for"] || map["rentfor"] || null,
     deposit: map["deposit"] || null,
   };
@@ -340,6 +364,34 @@ export function parseDurationFromTitle(title) {
   if (!title) return null;
   const match = /(\d+)\s*-?\s*day/i.exec(title);
   return match ? Number(match[1]) : null;
+}
+
+function durationFromProps(props, opts, lineItem) {
+  const start = toUtcMidnight(props.rentalStart);
+  const end = toUtcMidnight(props.rentalEnd);
+  if (start && end) {
+    const inclusive = diffDaysUtc(end, start) + 1;
+    if (inclusive > 0) return inclusive;
+  }
+  return (
+    parseDurationValue(props.duration) ||
+    parseDurationValue(opts.duration) ||
+    parseDurationFromTitle(lineItem.variantTitle) ||
+    1
+  );
+}
+
+function parseRentalDates(value) {
+  if (!value) return [];
+  const seen = new Set();
+  const dates = [];
+  for (const part of String(value).split(/[,\s]+/)) {
+    const match = /^(\d{4}-\d{2}-\d{2})$/.exec(part.trim());
+    if (!match || seen.has(match[1])) continue;
+    seen.add(match[1]);
+    dates.push(match[1]);
+  }
+  return dates;
 }
 
 function parseDurationValue(value) {

@@ -38,5 +38,6 @@ export async function deactivateShop(shopDomain) {
   if (!shop) return null;
   await prisma.shop.update({ where: { id: shop.id }, data: { active: false } });
   await prisma.rentalUnit.updateMany({ where: { shopId: shop.id }, data: { active: false } });
+  await prisma.productRentalConfig.updateMany({ where: { shopId: shop.id }, data: { active: false } });
   return shop;
 }

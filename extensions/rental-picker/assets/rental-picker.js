@@ -2,6 +2,7 @@
 (function () {
   const RENT_FOR_NAME = /rent\s*for|duration/i;
   const DAY_VALUE = /(\d+)\s*-?\s*days?/i;
+  const SETTINGS_WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
   const rangesCache = new Map();
   let flatpickrReady = new Promise((res) => {
     const check = () => (window.flatpickr ? res(window.flatpickr) : setTimeout(check, 50));
@@ -28,6 +29,7 @@
     const shopDomain = root.getAttribute("data-shop");
     const productId = root.getAttribute("data-product-id");
     const config = loadConfig(root);
+    const settings = normalizeRentalSettings(config.rentalSettings);
     const optionNames = config.optionNames;
     const liquidVariants = config.variants;
     const input = root.querySelector(".rental-picker__input");
@@ -41,6 +43,7 @@
     const startProp = root.querySelector("[data-rental-start-prop]");
     const endProp = root.querySelector("[data-rental-end-prop]");
     const durationProp = root.querySelector("[data-rental-duration-prop]");
+    const datesProp = root.querySelector("[data-rental-dates-prop]");
     const depositProp = root.querySelector("[data-rental-deposit-prop]");
     const depositDisplay = root.querySelector("[data-rental-deposit-display]");
     const variantIdInput = root.querySelector("[data-rental-variant-id]");
@@ -64,6 +67,7 @@
       duration: 1,
       start: null,
       end: null,
+      dates: [],
       ranges: [],
       bufferBefore: 0,
       bufferAfter: 0,
@@ -80,6 +84,7 @@
     }
 
     function applyRangeClass(dayElem) {
+      if (settings.bookingType === "multiple") return;
       dayElem.classList.remove("selected", "startRange", "endRange", "inRange");
       if (!state.start || !dayElem.dateObj) return;
       if (dayElem.classList.contains("prevMonthDay") || dayElem.classList.contains("nextMonthDay")) return;
@@ -158,6 +163,7 @@
         fp.clear();
         state.start = null;
         state.end = null;
+        state.dates = [];
         state.clearedOverlap = false;
         validate();
       });
@@ -176,8 +182,11 @@
       if (sheet) sheet.replaceChildren();
       setSheetOpen(false);
 
+      const bounds = calendarBounds(settings);
       picker = flatpickr(input, {
-        minDate: new Date().fp_incr(3),
+        mode: pickerMode(settings.bookingType),
+        minDate: bounds.min,
+        maxDate: bounds.max,
         dateFormat: "Y-m-d",
         altInput: true,
         altFormat: "F j, Y",
@@ -190,7 +199,7 @@
         position: mobile ? "auto" : "below",
         static: false,
         locale: { firstDayOfWeek: 0 },
-        disable: [(date) => isStartBlocked(date)],
+        disable: [(date) => isDayDisabled(date)],
         onReady: (_d, _s, fp) => {
           fp.calendarContainer.classList.add("rental-picker-calendar");
           fp.calendarContainer.classList.toggle("rental-picker-calendar--mobile", mobile);
@@ -228,9 +237,8 @@
           applyRangeClass(dayElem);
         },
         onChange: (dates) => {
-          state.start = dates[0] || null;
-          if (state.start) state.clearedOverlap = false;
-          syncEndFromDuration();
+          applyPickedDates(dates);
+          state.clearedOverlap = false;
           validate();
           if (picker) {
             picker.calendarContainer.querySelectorAll(".flatpickr-day").forEach(applyRangeClass);
@@ -270,10 +278,12 @@
       if (gen !== applyGen) return;
       const sameVariant = nextId === state.variantId;
       state.variantId = nextId;
-      state.duration = nextDuration;
+      if (settings.bookingType === "single") {
+        state.duration = nextDuration;
+        syncEndFromDuration();
+      }
       if (variantIdInput && state.variantId) variantIdInput.value = state.variantId;
       if (durationProp) durationProp.value = String(state.duration);
-      syncEndFromDuration();
       validate();
       if (!sameVariant || !state.ranges.length) await refreshRanges();
       else applyDisabledDates();
@@ -283,6 +293,111 @@
 
     hookVariantChanges(root, variantIdInput, optionNames, liquidVariants, (v) => applyVariant(v));
     applyVariant(currentVariantFromPage(root, variantIdInput, liquidVariants));
+
+    function applyPickedDates(dates) {
+      const sorted = (dates || []).slice().sort((a, b) => dayTime(a) - dayTime(b));
+      if (settings.bookingType === "multiple") {
+        state.dates = sorted;
+        state.start = sorted[0] || null;
+        state.end = sorted[sorted.length - 1] || null;
+        state.duration = Math.max(1, sorted.length);
+        return;
+      }
+      state.dates = [];
+      if (settings.bookingType === "range") {
+        state.start = sorted[0] || null;
+        state.end = sorted[1] || null;
+        if (state.start && state.end) state.duration = inclusiveDays(state.start, state.end);
+        return;
+      }
+      state.start = sorted[0] || null;
+      syncEndFromDuration();
+    }
+
+    function inclusiveDays(start, end) {
+      return Math.max(1, Math.round((dayTime(end) - dayTime(start)) / 86400000) + 1);
+    }
+
+    function weekdayAllowed(date, role) {
+      const keys = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const flags = settings.weekdays[keys[date.getDay()]];
+      if (!flags) return true;
+      return flags[role] !== false;
+    }
+
+    function isBlockedDate(date) {
+      return settings.blockDates.has(ymd(date));
+    }
+
+    function rangeHasBlockedDate(start, end) {
+      const days = inclusiveDays(start, end);
+      for (let i = 0; i < days; i += 1) {
+        if (isBlockedDate(addDays(start, i))) return true;
+      }
+      return false;
+    }
+
+    function outsideWindow(date) {
+      if (!date) return false;
+      const bounds = calendarBounds(settings);
+      const time = dayTime(date);
+      return time < dayTime(bounds.min) || time > dayTime(bounds.max);
+    }
+
+    function isDayDisabled(date) {
+      if (!date) return false;
+      if (outsideWindow(date)) return true;
+      if (settings.bookingType === "range" && state.start && !state.end) {
+        if (dayTime(date) < dayTime(state.start)) return true;
+        if (dayTime(date) === dayTime(state.start)) return isBlockedDate(date) || !weekdayAllowed(date, "start");
+        if (!weekdayAllowed(date, "end") || isBlockedDate(date)) return true;
+        if (rangeHasBlockedDate(state.start, date)) return true;
+        return windowOverlapsBlocked(
+          state.start,
+          inclusiveDays(state.start, date),
+          state.ranges,
+          state.bufferBefore,
+          state.bufferAfter,
+        );
+      }
+      if (settings.bookingType === "multiple") {
+        return (
+          isBlockedDate(date) ||
+          !weekdayAllowed(date, "start") ||
+          windowOverlapsBlocked(date, 1, state.ranges, state.bufferBefore, state.bufferAfter)
+        );
+      }
+      return isBlockedDate(date) || !weekdayAllowed(date, "start") || isStartBlocked(date);
+    }
+
+    function selectionInvalid() {
+      const chosen = settings.bookingType === "multiple" ? state.dates : [state.start, state.end];
+      if (chosen.some((date) => date && outsideWindow(date))) return true;
+      if (settings.bookingType === "multiple") {
+        if (!state.dates.length) return false;
+        return state.dates.some(
+          (date) =>
+            isBlockedDate(date) ||
+            !weekdayAllowed(date, "start") ||
+            windowOverlapsBlocked(date, 1, state.ranges, state.bufferBefore, state.bufferAfter),
+        );
+      }
+      if (settings.bookingType === "range") {
+        if (!state.start || !state.end) return false;
+        if (isBlockedDate(state.start) || !weekdayAllowed(state.start, "start")) return true;
+        if (isBlockedDate(state.end) || !weekdayAllowed(state.end, "end")) return true;
+        if (rangeHasBlockedDate(state.start, state.end)) return true;
+        return windowOverlapsBlocked(
+          state.start,
+          inclusiveDays(state.start, state.end),
+          state.ranges,
+          state.bufferBefore,
+          state.bufferAfter,
+        );
+      }
+      if (!state.start) return false;
+      return isBlockedDate(state.start) || !weekdayAllowed(state.start, "start") || isStartBlocked(state.start);
+    }
 
     function isStartBlocked(date) {
       if (!date) return false;
@@ -297,14 +412,18 @@
 
     function applyDisabledDates() {
       if (!picker) return;
-      picker.set("disable", [(date) => isStartBlocked(date)]);
+      const bounds = calendarBounds(settings);
+      picker.set("minDate", bounds.min);
+      picker.set("maxDate", bounds.max);
+      picker.set("disable", [(date) => isDayDisabled(date)]);
       picker.redraw();
       labelMonths(picker);
-      if (state.start && isStartBlocked(state.start)) {
+      if (selectionInvalid()) {
         state.clearedOverlap = true;
         picker.clear();
         state.start = null;
         state.end = null;
+        state.dates = [];
       }
     }
 
@@ -383,18 +502,19 @@
     }
 
     function validate() {
-      const overlapping = !!(state.start && isStartBlocked(state.start));
-      const ok =
-        !!state.start &&
-        !!state.end &&
-        !overlapping &&
-        !state.availabilityError;
+      const overlapping = selectionInvalid();
+      const complete = settings.bookingType === "multiple" ? state.dates.length > 0 : !!state.start && !!state.end;
+      const ok = complete && !overlapping && !state.availabilityError;
       if (submit) submit.disabled = !ok;
       if (durationProp) durationProp.value = String(state.duration);
       if (state.start && startProp) startProp.value = ymd(state.start);
       else if (startProp) startProp.value = "";
       if (state.end && endProp) endProp.value = ymd(state.end);
       else if (endProp) endProp.value = "";
+      if (datesProp) {
+        datesProp.value =
+          settings.bookingType === "multiple" ? state.dates.map((date) => ymd(date)).join(",") : "";
+      }
       if (depositProp) depositProp.value = depositPropertyValue(state.variantId, config);
       if (depositDisplay) {
         const amount = depositAmountForVariant(state.variantId, config);
@@ -402,7 +522,13 @@
       }
       if (durationDisplay) durationDisplay.textContent = durationText();
       updateCalDuration(picker);
-      if (endDisplay) endDisplay.textContent = state.end ? ymd(state.end) : "—";
+      if (endDisplay) {
+        if (settings.bookingType === "multiple" && state.dates.length) {
+          endDisplay.textContent = state.dates.map((date) => ymd(date)).join(", ");
+        } else {
+          endDisplay.textContent = state.end ? ymd(state.end) : "—";
+        }
+      }
       if (overlapping || state.clearedOverlap) showError(msgOverlap);
       else if (state.availabilityError) showError(msgAvailError);
       else showError("");
@@ -418,8 +544,9 @@
 
     async function addRentalAndDeposit() {
       if (adding) return;
-      const overlapping = !!(state.start && isStartBlocked(state.start));
-      if (!state.start || overlapping || state.availabilityError) {
+      const overlapping = selectionInvalid();
+      const complete = settings.bookingType === "multiple" ? state.dates.length > 0 : !!state.start;
+      if (!complete || overlapping || state.availabilityError) {
         showError(state.availabilityError ? msgAvailError : msgOverlap);
         return;
       }
@@ -446,6 +573,9 @@
         Duration: durationText(),
         _rental_link: rentalLink,
       };
+      if (settings.bookingType === "multiple" && state.dates.length) {
+        properties["Rental Dates"] = state.dates.map((date) => ymd(date)).join(",");
+      }
       if (amount > 0) properties["Refundable Security deposit"] = formatMoney(amount, config.moneyFormat);
       const items = [
         {
@@ -522,6 +652,59 @@
     return escapeHtml(value).replace(/'/g, "&#39;");
   }
 
+  function normalizeRentalSettings(raw) {
+    const source = raw && typeof raw === "object" ? raw : {};
+    const bookingType = "single";
+    const calendarStartDays = clampSetting(source.calendarStartDays, 0, 3650, 15);
+    let calendarEndDays = clampSetting(source.calendarEndDays, 0, 3650, 365);
+    if (calendarEndDays < calendarStartDays) calendarEndDays = calendarStartDays;
+    const incoming = source.weekdays && typeof source.weekdays === "object" ? source.weekdays : {};
+    const weekdays = {};
+    for (const key of SETTINGS_WEEKDAYS) {
+      const day = incoming[key] || {};
+      weekdays[key] = { start: day.start !== false, end: day.end !== false };
+    }
+    const blockDates = new Set();
+    const list = Array.isArray(source.blockDates) ? source.blockDates : [];
+    for (const item of list) {
+      const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(item || ""));
+      if (match) blockDates.add(match[1]);
+    }
+    const depositAmount = Number(source.depositAmount);
+    return {
+      bookingType,
+      blockDates,
+      calendarStartDays,
+      calendarEndDays,
+      weekdays,
+      depositAmount: Number.isFinite(depositAmount) ? Math.max(0, depositAmount) : 0,
+      depositPercent: clampSetting(source.depositPercent, 0, 100, 70),
+    };
+  }
+
+  function clampSetting(value, min, max, fallback) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, Math.trunc(n)));
+  }
+
+  function pickerMode(bookingType) {
+    if (bookingType === "range") return "range";
+    if (bookingType === "multiple") return "multiple";
+    return "single";
+  }
+
+  function calendarBounds(settings) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startDays = settings.calendarStartDays;
+    const min = new Date(today);
+    min.setDate(min.getDate() + startDays);
+    const max = new Date(today);
+    max.setDate(max.getDate() + Math.max(startDays, settings.calendarEndDays));
+    return { min, max };
+  }
+
   function loadConfig(root) {
     const el = root.querySelector("[data-rental-config]");
     const fromScript = safeJson(el?.textContent);
@@ -531,6 +714,7 @@
         variants: fromScript.variants || [],
         securityDeposit: parseMoneyAmount(fromScript.securityDeposit),
         depositPercent: Number(fromScript.depositPercent) || 70,
+        rentalSettings: rentalSettingsFromConfig(fromScript.rentalSettings),
         securityProduct: fromScript.securityProduct || null,
         productTitle: fromScript.productTitle || "",
         moneyFormat: fromScript.moneyFormat || "${{amount}}",
@@ -541,10 +725,19 @@
       variants: safeJson(root.getAttribute("data-variants")) || [],
       securityDeposit: parseMoneyAmount(root.getAttribute("data-security-deposit")),
       depositPercent: 70,
+      rentalSettings: null,
       securityProduct: null,
       productTitle: "",
       moneyFormat: root.getAttribute("data-money-format") || "${{amount}}",
     };
+  }
+
+  function rentalSettingsFromConfig(value) {
+    if (typeof value === "string") {
+      const parsed = safeJson(value);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    }
+    return value && typeof value === "object" ? value : null;
   }
 
   function normalizeOptionNames(raw) {
@@ -568,6 +761,9 @@
   }
 
   function depositPercent(config) {
+    if (config?.rentalSettings && Number.isFinite(Number(config.rentalSettings.depositPercent))) {
+      return Math.max(0, Number(config.rentalSettings.depositPercent));
+    }
     const rate = Number(config?.depositPercent);
     return Number.isFinite(rate) && rate > 0 ? rate : 70;
   }
@@ -580,6 +776,18 @@
   }
 
   function depositCentsForVariant(variantId, config) {
+    const fixed = Number(config?.rentalSettings?.depositAmount);
+    if (config?.rentalSettings && Number.isFinite(fixed) && fixed > 0) {
+      return roundCentsToTen(Math.round(fixed * 100));
+    }
+    if (config?.rentalSettings) {
+      const variant = (config?.variants || []).find(
+        (item) => normalizeVariantId(item.id) === normalizeVariantId(variantId),
+      );
+      const priceCents = Number(variant?.price);
+      if (!Number.isFinite(priceCents) || priceCents <= 0) return 0;
+      return roundCentsToTen(Math.round((priceCents * depositPercent(config)) / 100));
+    }
     const fromMetafield = config?.securityDeposit;
     if (fromMetafield != null) {
       if (!(fromMetafield > 0)) return 0;

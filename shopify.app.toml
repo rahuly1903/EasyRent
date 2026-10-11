@@ -56,6 +56,12 @@ api_version = "2026-10"
 # Cart transform / function scopes omitted: custom apps cannot activate Shopify Functions on non-Plus stores.
 scopes = "read_products,write_products,read_orders,read_customers"
 
+[product.metafields.app.rental_settings]
+type = "json"
+name = "Rental settings"
+access.admin = "merchant_read_write"
+access.storefront = "public_read"
+
 [product.metafields.app.security_deposit]
 type = "money"
 name = "Rental security deposit"

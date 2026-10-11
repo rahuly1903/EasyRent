@@ -1,76 +1,433 @@
-import { useLoaderData, useRouteError } from "react-router";
+import { useEffect, useState } from "react";
+import { useFetcher, useLoaderData, useLocation, useNavigation, useRouteError, useSearchParams } from "react-router";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
 import { getOrCreateShop } from "../services/shop.server";
-import { dashboardBuckets } from "../services/booking.server";
-import { countActiveRentalUnits } from "../services/sync.server";
+import {
+  dashboardStats,
+  deactivateUnlinkedUnits,
+  listLinkedProducts,
+  unlinkProducts,
+} from "../services/rental-config.server";
+import { Checkbox, ClickButton, SearchField } from "../components/polaris-controls";
+
+const EDIT_PRODUCT_LIMIT = 50;
+const SORT_OPTIONS = [
+  { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" },
+  { value: "title", label: "A-Z" },
+];
+
+const PAGE_SIZE = 20;
 
 export const loader = async ({ request }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop);
-  const [unitCount, bookingCount, buckets] = await Promise.all([
-    countActiveRentalUnits(admin, shop.id).catch((e) => {
-      console.error("[app] rental unit count", e);
-      return prisma.rentalUnit.count({ where: { shopId: shop.id, active: true } });
-    }),
-    prisma.booking.count({ where: { shopId: shop.id, status: { not: "cancelled" } } }),
-    dashboardBuckets(shop.id),
+  await deactivateUnlinkedUnits(shop.id).catch((error) => {
+    console.error("[app] deactivate unlinked units", error);
+  });
+
+  const url = new URL(request.url);
+  const q = url.searchParams.get("q") || "";
+  const sort = ["newest", "oldest", "title"].includes(url.searchParams.get("sort"))
+    ? url.searchParams.get("sort")
+    : "newest";
+  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1);
+  const [stats, list] = await Promise.all([
+    dashboardStats(shop.id),
+    listLinkedProducts({ shopId: shop.id, q, sort, page, pageSize: PAGE_SIZE }),
   ]);
+
+  // eslint-disable-next-line no-undef
+  const apiKey = process.env.SHOPIFY_API_KEY || "";
+  const themeEditorUrl = apiKey
+    ? `https://${shop.shopDomain}/admin/themes/current/editor?template=product&addAppBlockId=${apiKey}/rental_picker&target=newAppsSection`
+    : `https://${shop.shopDomain}/admin/themes/current/editor?template=product`;
+
   return {
-    shop: shop.shopDomain,
-    unitCount,
-    bookingCount,
-    today: buckets.deliveries.length + buckets.pickups.length,
+    stats,
+    q,
+    sort,
+    page: list.page,
+    pageSize: list.pageSize,
+    total: list.total,
+    totalPages: list.totalPages,
+    themeEditorUrl,
+    rows: list.rows.map((row) => presentRow(row, shop.shopDomain)),
   };
 };
 
-export default function Index() {
-  const { unitCount, bookingCount, today } = useLoaderData();
- 
+export const action = async ({ request }) => {
+  const { admin, session } = await authenticate.admin(request);
+  const shop = await getOrCreateShop(session.shop);
+  const form = await request.formData();
+  if (form.get("intent") !== "unlink") return { ok: false };
+  const productIds = parseIds(form.get("productIds"));
+  await unlinkProducts({ admin, shopId: shop.id, productIds });
+  return { ok: true, intent: "unlink" };
+};
+
+export default function Dashboard() {
+  const data = useLoaderData();
+  const fetcher = useFetcher();
+  const shopify = useAppBridge();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigation = useNavigation();
+  const location = useLocation();
+  const [checked, setChecked] = useState({});
+  const [query, setQuery] = useState(data.q || "");
+  const tableLoading = navigation.state === "loading" && navigation.location?.pathname === location.pathname;
+  const from = data.total === 0 ? 0 : (data.page - 1) * data.pageSize + 1;
+  const to = Math.min(data.page * data.pageSize, data.total);
+  const checkedIds = Object.keys(checked);
+  const pageIds = data.rows.map((row) => row.id);
+  const allChecked = pageIds.length > 0 && pageIds.every((id) => checked[id]);
+  const canBulkEdit = checkedIds.length > 0 && checkedIds.length <= EDIT_PRODUCT_LIMIT;
+  const editProductsHref = canBulkEdit
+    ? `/app/link?products=${checkedIds.map((id) => encodeURIComponent(id)).join(",")}`
+    : "";
+  const sortLabel = SORT_OPTIONS.find((option) => option.value === data.sort)?.label || "Newest";
+
+  useEffect(() => {
+    setQuery(data.q || "");
+  }, [data.q]);
+
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.ok && fetcher.data.intent === "unlink") {
+      shopify.toast.show("Products unlinked");
+      setChecked({});
+    }
+  }, [fetcher.state, fetcher.data, shopify]);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      const current = searchParams.get("q") || "";
+      if (query === current) return;
+      const params = new URLSearchParams(searchParams);
+      if (query) params.set("q", query);
+      else params.delete("q");
+      params.set("page", "1");
+      setSearchParams(params);
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [query, searchParams, setSearchParams]);
+
+  function updateParams(updates) {
+    const params = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+      else params.delete(key);
+    });
+    setSearchParams(params);
+  }
+
+  function unlink(ids) {
+    const body = new FormData();
+    body.set("intent", "unlink");
+    body.set("productIds", JSON.stringify(ids));
+    fetcher.submit(body, { method: "POST" });
+  }
+
+  function chooseSort(sort) {
+    updateParams({ sort, page: "1" });
+    document.getElementById("dashboard-product-sort")?.hideOverlay?.();
+  }
+
+  function togglePage(nextChecked) {
+    setChecked((current) => {
+      const next = { ...current };
+      for (const row of data.rows) {
+        if (nextChecked) next[row.id] = row.title;
+        else delete next[row.id];
+      }
+      return next;
+    });
+  }
+
+  function toggleRow(row, nextChecked) {
+    setChecked((current) => {
+      const next = { ...current };
+      if (nextChecked) next[row.id] = row.title;
+      else delete next[row.id];
+      return next;
+    });
+  }
+
   return (
-    <s-page heading="EasyRent">
-      <s-section heading="Overview">
-        <s-grid gridTemplateColumns="1fr 1fr 1fr" gap="base">
+    <s-page heading="Dashboard" inlineSize="large">
+      <s-button slot="primary-action" variant="primary" href="/app/link">
+        Link Products
+      </s-button>
+      <s-button slot="secondary-actions" href="/app/settings">
+        Settings
+      </s-button>
+      <s-button slot="secondary-actions" href={data.themeEditorUrl} target="_blank" icon="theme">
+        App block
+      </s-button>
+
+      <s-stack direction="block" gap="base">
+        <s-grid gridTemplateColumns="1fr 1fr" gap="base">
           <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
             <s-stack direction="block" gap="base">
-              <s-text>Active rental units</s-text>
-              <s-heading>{String(unitCount)}</s-heading>
+              <s-text>Last 30 days</s-text>
+              <s-grid gridTemplateColumns="1fr 1fr" gap="base">
+                <s-stack direction="block" gap="small-200">
+                  <s-heading>{String(data.stats.ordersMade)}</s-heading>
+                  <s-text color="subdued">Orders made</s-text>
+                </s-stack>
+                <s-stack direction="block" gap="small-200">
+                  <s-heading>{String(data.stats.productsBooked)}</s-heading>
+                  <s-text color="subdued">Products booked</s-text>
+                </s-stack>
+              </s-grid>
             </s-stack>
           </s-box>
           <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-            <s-stack direction="block" gap="base">
-              <s-text>Open bookings</s-text>
-              <s-heading>{String(bookingCount)}</s-heading>
-            </s-stack>
-          </s-box>
-          <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-            <s-stack direction="block" gap="base">
-              <s-text>Today's deliveries + pickups</s-text>
-              <s-heading>{String(today)}</s-heading>
-            </s-stack>
+            <s-grid gridTemplateColumns="1fr 220px" gap="base" alignItems="center">
+              <s-stack direction="block" gap="small-200">
+                <s-text>Bookings this month</s-text>
+                <s-heading>{String(data.stats.bookingsThisMonth)}</s-heading>
+              </s-stack>
+              <SearchField
+                label="Search products"
+                labelAccessibilityVisibility="exclusive"
+                placeholder="Search products"
+                value={query}
+                onInput={(event) => setQuery(event.currentTarget.value)}
+              ></SearchField>
+            </s-grid>
           </s-box>
         </s-grid>
-      </s-section>
-      <s-section heading="Get started">
-        <s-unordered-list>
-          <s-list-item>
-            Tag rental products with <s-text type="strong">rent</s-text>
-          </s-list-item>
-          <s-list-item>
-            Set <s-text type="strong">Rentable quantity</s-text> on each variant in Shopify.
-            Leave it empty to default to 1
-          </s-list-item>
-          <s-list-item>
-            Add the <s-text type="strong">Rental picker</s-text> app block to your product page
-          </s-list-item>
-          <s-list-item>
-            Track orders on <s-link href="/app/bookings">Bookings</s-link>
-          </s-list-item>
-        </s-unordered-list>
-      </s-section>
+
+        <s-section padding="none">
+          <s-box padding="base">
+            <s-stack direction="block" gap="base">
+              <SearchField
+                label="Search products"
+                labelAccessibilityVisibility="exclusive"
+                placeholder="Search Products"
+                value={query}
+                onInput={(event) => setQuery(event.currentTarget.value)}
+              ></SearchField>
+              {checkedIds.length ? (
+                <s-grid gridTemplateColumns="1fr auto" gap="base" alignItems="center">
+                  <s-stack direction="inline" gap="small-200" alignItems="center">
+                    <s-text type="strong">{checkedIds.length} selected</s-text>
+                    <ClickButton variant="tertiary" onClick={() => setChecked({})}>
+                      Clear
+                    </ClickButton>
+                  </s-stack>
+                  <s-stack direction="inline" gap="small-200" alignItems="center">
+                    <s-button
+                      variant="secondary"
+                      href={canBulkEdit ? editProductsHref : undefined}
+                      disabled={canBulkEdit ? undefined : true}
+                      accessibilityLabel={
+                        canBulkEdit ? editProductsLabel(checked) : `Select up to ${EDIT_PRODUCT_LIMIT} products to edit`
+                      }
+                    >
+                      {editProductsLabel(checked)}
+                    </s-button>
+                    <ClickButton
+                      variant="secondary"
+                      tone="critical"
+                      loading={fetcher.state !== "idle"}
+                      onClick={() => unlink(checkedIds)}
+                    >
+                      Unlink Products
+                    </ClickButton>
+                  </s-stack>
+                </s-grid>
+              ) : (
+                <s-grid gridTemplateColumns="1fr auto" gap="base" alignItems="center">
+                  <s-text>{data.total} Products</s-text>
+                  <s-button
+                    variant="secondary"
+                    commandFor="dashboard-product-sort"
+                    command="--show"
+                    icon="chevron-down"
+                  >
+                    Sort by {sortLabel}
+                  </s-button>
+                </s-grid>
+              )}
+            </s-stack>
+          </s-box>
+          {data.rows.length ? (
+            <s-table
+              loading={tableLoading}
+              paginate
+              hasPreviousPage={data.page > 1}
+              hasNextPage={data.page < data.totalPages}
+              onPreviousPage={() => updateParams({ page: String(data.page - 1) })}
+              onNextPage={() => updateParams({ page: String(data.page + 1) })}
+              paginationLabel={`${from}–${to} of ${data.total}`}
+            >
+              <s-table-header-row>
+                <s-table-header>
+                  <Checkbox
+                    accessibilityLabel="Select all products on this page"
+                    checked={allChecked}
+                    onChange={() => togglePage(!allChecked)}
+                  ></Checkbox>
+                </s-table-header>
+                <s-table-header listSlot="primary">Product</s-table-header>
+                <s-table-header>Rental</s-table-header>
+                <s-table-header></s-table-header>
+              </s-table-header-row>
+              <s-table-body>
+                {data.rows.map((row) => (
+                  <s-table-row key={row.id}>
+                    <s-table-cell>
+                      <Checkbox
+                        accessibilityLabel={`Select ${row.title}`}
+                        checked={Boolean(checked[row.id])}
+                        onChange={(event) => {
+                          const target = event.currentTarget || event.target;
+                          toggleRow(row, Boolean(target.checked));
+                        }}
+                      ></Checkbox>
+                    </s-table-cell>
+                    <s-table-cell>
+                      <s-stack direction="inline" gap="base" alignItems="center">
+                        <s-thumbnail src={row.image} alt={row.title} size="small"></s-thumbnail>
+                        <s-text type="strong">{row.title}</s-text>
+                      </s-stack>
+                    </s-table-cell>
+                    <s-table-cell>
+                      <s-stack direction="inline" gap="small-200" alignItems="center">
+                        <s-badge tone="success">{bookingLabel(row.bookingType)}</s-badge>
+                        <s-badge tone="success">Stock: {row.stock}</s-badge>
+                        <s-badge tone="success">
+                          {row.calendarStartDays} → {row.calendarEndDays}
+                        </s-badge>
+                        {row.durationLabels.length ? (
+                          <s-badge tone="success">Duration: {row.durationLabels.join(" / ")}</s-badge>
+                        ) : null}
+                        <s-badge tone="success">
+                          Deposit: {formatAmount(row.depositAmount)} / {row.depositPercent}%
+                        </s-badge>
+                      </s-stack>
+                    </s-table-cell>
+                    <s-table-cell>
+                      <s-stack direction="block" gap="small-200" alignItems="end">
+                        <s-stack direction="inline" gap="small-200">
+                          <s-button
+                            icon="edit"
+                            variant="tertiary"
+                            accessibilityLabel={`Edit ${row.title}`}
+                            href={`/app/link?products=${encodeURIComponent(row.id)}`}
+                          ></s-button>
+                          {row.storeUrl ? (
+                            <s-button
+                              icon="external"
+                              variant="tertiary"
+                              accessibilityLabel={`View ${row.title} on the online store`}
+                              href={row.storeUrl}
+                              target="_blank"
+                            ></s-button>
+                          ) : null}
+                          <ClickButton
+                            icon="delete"
+                            variant="tertiary"
+                            tone="critical"
+                            accessibilityLabel={`Unlink ${row.title}`}
+                            onClick={() => unlink([row.id])}
+                          ></ClickButton>
+                        </s-stack>
+                        <s-text color="subdued">{timeAgo(row.updatedAt)}</s-text>
+                      </s-stack>
+                    </s-table-cell>
+                  </s-table-row>
+                ))}
+              </s-table-body>
+            </s-table>
+          ) : (
+            <s-box padding="large">
+              <s-stack direction="block" gap="base" alignItems="center">
+                <s-heading>{data.q ? "No products match that search" : "No linked products yet"}</s-heading>
+                <s-paragraph color="subdued">
+                  Link a product to choose how customers book it. The rental picker shows on linked products only.
+                </s-paragraph>
+              </s-stack>
+            </s-box>
+          )}
+        </s-section>
+      </s-stack>
+      <s-popover id="dashboard-product-sort">
+        <s-box padding="base">
+          <s-stack direction="block" gap="small-200">
+            {SORT_OPTIONS.map((option) => (
+              <ClickButton key={option.value} variant="tertiary" onClick={() => chooseSort(option.value)}>
+                {option.label}
+              </ClickButton>
+            ))}
+          </s-stack>
+        </s-box>
+      </s-popover>
     </s-page>
   );
+}
+
+function editProductsLabel(selected) {
+  const ids = Object.keys(selected);
+  if (ids.length === 1) return `Edit Products (${selected[ids[0]]} - Rent settings loaded)`;
+  return `Edit Products (${ids.length} products - Rent settings loaded)`;
+}
+
+function presentRow(row, shopDomain) {
+  const labels = Array.isArray(row.durationLabels) ? row.durationLabels.map(String) : [];
+  return {
+    id: row.productId,
+    title: row.productTitle || "Untitled product",
+    image: row.productImage || "",
+    storeUrl: row.productHandle ? `https://${shopDomain}/products/${row.productHandle}` : "",
+    bookingType: row.bookingType || "single",
+    stock: row.stock ?? 1,
+    calendarStartDays: row.calendarStartDays,
+    calendarEndDays: row.calendarEndDays,
+    durationLabels: labels,
+    depositAmount: row.depositAmount ?? 0,
+    depositPercent: row.depositPercent ?? 70,
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function bookingLabel(type) {
+  if (type === "range") return "Range";
+  if (type === "multiple") return "Multiple";
+  return "Single";
+}
+
+function formatAmount(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "0";
+  return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
+}
+
+function timeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const minutes = Math.max(0, Math.floor(diff / 60000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} month${months === 1 ? "" : "s"} ago`;
+  const years = Math.floor(days / 365);
+  return `${years} year${years === 1 ? "" : "s"} ago`;
+}
+
+function parseIds(value) {
+  try {
+    const parsed = JSON.parse(String(value || "[]"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 export function ErrorBoundary() {

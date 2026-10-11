@@ -32,6 +32,7 @@ export const action = async ({ request }) => {
       if (shopRow) {
         await prisma.booking.deleteMany({ where: { shopId: shopRow.id } });
         await prisma.rentalUnit.deleteMany({ where: { shopId: shopRow.id } });
+        await prisma.productRentalConfig.deleteMany({ where: { shopId: shopRow.id } });
         await prisma.settings.deleteMany({ where: { shopId: shopRow.id } });
         await prisma.shop.delete({ where: { id: shopRow.id } });
       }

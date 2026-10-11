@@ -1,14 +1,14 @@
 {% liquid
-  assign is_rent_product = false
-  for tag in product.tags
-    assign tag_down = tag | downcase
-    if tag_down == 'rent'
-      assign is_rent_product = true
-    endif
-  endfor
+  assign rental_settings = product.metafields["$app"].rental_settings
+  if rental_settings == blank
+    assign rental_settings = product.metafields.app.rental_settings
+  endif
+  assign security_deposit = product.metafields["$app"].security_deposit
+  if security_deposit == blank
+    assign security_deposit = product.metafields.app.security_deposit
+  endif
 %}
-
-{% if is_rent_product %}
+{% if rental_settings != blank %}
   {% liquid
     assign proxy_base = block.settings.proxy_base | default: '/apps/rental'
     assign deposit_percent = block.settings.deposit_percent | default: 70
@@ -56,8 +56,9 @@
             }{% unless forloop.last %},{% endunless %}
           {%- endfor -%}
         ],
-        "securityDeposit": {% if product.metafields.app.security_deposit.value.amount %}{{ product.metafields.app.security_deposit.value.amount | json }}{% else %}null{% endif %},
+        "securityDeposit": {% if security_deposit.value.amount %}{{ security_deposit.value.amount | json }}{% else %}null{% endif %},
         "depositPercent": {{ deposit_percent | json }},
+        "rentalSettings": {{ rental_settings.value | json }},
         "securityProduct": {% if security_product != blank %}{
           "id": {{ security_product.id | json }},
           "title": {{ security_product.title | json }},
@@ -123,6 +124,7 @@
       <input type="hidden" name="properties[Rental Start]" value="" data-rental-start-prop />
       <input type="hidden" name="properties[Rental End]" value="" data-rental-end-prop />
       <input type="hidden" name="properties[Duration]" value="" data-rental-duration-prop />
+      <input type="hidden" name="properties[Rental Dates]" value="" data-rental-dates-prop />
       <input type="hidden" name="properties[Refundable Security deposit]" value="" data-rental-deposit-prop />
       <button
         type="submit"

@@ -34,9 +34,10 @@ model Shop {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  settings    Settings?
-  rentalUnits RentalUnit[]
-  bookings    Booking[]
+  settings      Settings?
+  rentalUnits   RentalUnit[]
+  bookings      Booking[]
+  productConfigs ProductRentalConfig[]
 }
 
 model Settings {
@@ -55,6 +56,33 @@ model Settings {
   shop                     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 
+model ProductRentalConfig {
+  id                String   @id @default(cuid())
+  shopId            String
+  productId         String
+  productTitle      String?
+  productHandle     String?
+  productImage      String?
+  bookingType       String   @default("single")
+  blockDates        Json
+  calendarStartDays Int      @default(15)
+  calendarEndDays   Int      @default(365)
+  weekdays          Json
+  depositAmount     Float    @default(0)
+  depositPercent    Int      @default(70)
+  durationLabels    Json
+  stock             Int      @default(1)
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, productId])
+  @@index([shopId, active])
+  @@index([shopId, updatedAt])
+}
+
 model RentalUnit {
   id                 String   @id @default(cuid())
   shopId             String
@@ -68,10 +96,8 @@ model RentalUnit {
   active             Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
-
   shop               Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
   bookings           Booking[]
-
   @@unique([shopId, productId, variantId])
   @@index([shopId, productId])
   @@index([shopId, variantId])

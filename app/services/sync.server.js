@@ -1,15 +1,15 @@
 import { getOrCreateShop } from "./shop.server";
 import { syncProductUnits, deactivateProductUnits } from "./rental-unit.server";
+import { durationLabelsFromVariants, stockFromVariants } from "./rental-config.server";
 import prisma from "../db.server";
-
-export const RENT_TAG = "rent";
 
 const PRODUCT_QUERY = `#graphql
   query GetProduct($id: ID!) {
     product(id: $id) {
       id
       title
-      tags
+      handle
+      featuredImage { url }
       variants(first: 100) {
         nodes {
           id
@@ -18,23 +18,6 @@ const PRODUCT_QUERY = `#graphql
           rentableQuantity: metafield(key: "rentable_quantity") {
             jsonValue
           }
-        }
-      }
-    }
-  }
-`;
-
-const RENT_UNITS_QUERY = `#graphql
-  query RentTaggedProductUnits($cursor: String) {
-    products(first: 250, query: "tag:rent", after: $cursor) {
-      pageInfo {
-        hasNextPage
-        endCursor
-      }
-      nodes {
-        id
-        variantsCount {
-          count
         }
       }
     }
@@ -50,73 +33,50 @@ async function adminGraphql(admin, query, variables) {
   return body.data;
 }
 
-export function isRentalProduct(node) {
-  if (!node) return false;
-  return (node.tags || []).some((tag) => String(tag).toLowerCase() === RENT_TAG);
+export async function countActiveRentalUnits(_admin, shopId) {
+  if (!shopId) return 0;
+  return prisma.rentalUnit.count({ where: { shopId, active: true } });
 }
 
-export async function countActiveRentalUnits(admin, shopId) {
-  if (!admin) return 0;
-
-  let cursor = null;
-  let total = 0;
-  const rentProductIds = [];
-
-  do {
-    const data = await adminGraphql(
-      admin,
-      RENT_UNITS_QUERY,
-      cursor ? { cursor } : { cursor: null },
-    );
-    const connection = data?.products;
-    for (const node of connection?.nodes || []) {
-      if (node?.id) rentProductIds.push(node.id);
-      const n = Number(node?.variantsCount?.count);
-      total += Number.isFinite(n) ? n : 0;
-    }
-    cursor = connection?.pageInfo?.hasNextPage ? connection.pageInfo.endCursor : null;
-  } while (cursor);
-
-  if (shopId) {
-    await deactivateUnitsNotIn(shopId, rentProductIds);
-  }
-
-  return total;
-}
-
-async function deactivateUnitsNotIn(shopId, productIds) {
-  if (!productIds.length) {
-    await prisma.rentalUnit.updateMany({
-      where: { shopId, active: true },
-      data: { active: false },
-    });
-    return;
-  }
-  await prisma.rentalUnit.updateMany({
-    where: {
-      shopId,
-      active: true,
-      productId: { notIn: productIds },
-    },
-    data: { active: false },
+async function activeConfig(shopId, productId) {
+  return prisma.productRentalConfig.findFirst({
+    where: { shopId, productId, active: true },
   });
 }
 
 export async function syncOneProduct({ admin, shopDomain, productId }) {
   const shop = await getOrCreateShop(shopDomain);
   const gid = normalizeProductGid(productId);
+  const linked = await activeConfig(shop.id, gid);
+  if (!linked) return { skipped: true, reason: "not-rental" };
+
   const data = await adminGraphql(admin, PRODUCT_QUERY, { id: gid });
   const p = data?.product;
-  if (!p) return { skipped: true, reason: "not-found" };
-  if (!isRentalProduct(p)) {
+  if (!p) {
     await deactivateProductUnits(shop.id, gid);
-    return { skipped: true, reason: "not-rental" };
+    await prisma.productRentalConfig.updateMany({
+      where: { shopId: shop.id, productId: gid },
+      data: { active: false },
+    });
+    return { skipped: true, reason: "not-found" };
   }
+
+  const variants = p.variants?.nodes || [];
   await syncProductUnits({
     shopId: shop.id,
     productId: gid,
     productTitle: p.title,
-    variants: p.variants?.nodes || [],
+    variants,
+  });
+  await prisma.productRentalConfig.update({
+    where: { shopId_productId: { shopId: shop.id, productId: gid } },
+    data: {
+      productTitle: p.title || null,
+      productHandle: p.handle || null,
+      productImage: p.featuredImage?.url || null,
+      durationLabels: durationLabelsFromVariants(variants),
+      stock: stockFromVariants(variants),
+    },
   });
   return { synced: true };
 }
@@ -125,6 +85,10 @@ export async function markProductDeleted({ shopDomain, productId }) {
   const shop = await getOrCreateShop(shopDomain);
   const gid = normalizeProductGid(productId);
   await deactivateProductUnits(shop.id, gid);
+  await prisma.productRentalConfig.updateMany({
+    where: { shopId: shop.id, productId: gid },
+    data: { active: false },
+  });
   return { deactivated: true };
 }
 
