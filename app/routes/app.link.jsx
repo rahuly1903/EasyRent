@@ -33,6 +33,7 @@ export const loader = async ({ request }) => {
     products: active.map(presentProduct),
     form: resolved.form,
     differ: resolved.differ,
+    productsFromUrl: ids.length > 0,
   };
 };
 
@@ -207,18 +208,22 @@ export default function LinkPage() {
       <s-stack direction="block" gap="large">
         <s-grid gridTemplateColumns="220px 1fr" gap="large" alignItems="center">
           <s-text type="strong">Select Products</s-text>
-          <s-grid gridTemplateColumns="auto 1fr" gap="base" alignItems="center">
-            <ClickButton variant="primary" disabled={saving} onClick={openPicker}>
-              Select Products
-            </ClickButton>
-            {loadedCopy ? (
-              <s-box padding="base" borderRadius="base" background="base" borderWidth="base">
-                <s-text>{loadedCopy}</s-text>
-              </s-box>
-            ) : (
-              <s-text color="subdued">{countLabel(selected.length)}</s-text>
-            )}
-          </s-grid>
+          <s-section>
+            <s-grid gridTemplateColumns="auto 1fr" gap="base" alignItems="center">
+              {loaded.productsFromUrl ? null : (
+                <ClickButton variant="primary" disabled={saving} onClick={openPicker}>
+                  Select Products
+                </ClickButton>
+              )}
+              {loadedCopy ? (
+                <s-box padding="base" borderRadius="base" background="base" borderWidth="base">
+                  <s-text>{loadedCopy}</s-text>
+                </s-box>
+              ) : (
+                <s-text color="subdued">{countLabel(selected.length)}</s-text>
+              )}
+            </s-grid>
+          </s-section>
         </s-grid>
 
         {saveFetcher.data?.error ? (
