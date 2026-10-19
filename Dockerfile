@@ -1,5 +1,5 @@
-FROM node:20.19-alpine
-RUN apk add --no-cache openssl
+FROM node:20-slim
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 # Pin npm to the lockfile's generator so `npm ci` stays in sync on Alpine.
 RUN npm install -g npm@11.6.2
 

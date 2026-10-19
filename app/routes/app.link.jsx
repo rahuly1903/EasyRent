@@ -17,6 +17,9 @@ import { BlockDatesField } from "../components/block-dates-field";
 import { Checkbox, ClickButton, NumberField } from "../components/polaris-controls";
 
 const MAX_PRODUCTS = 50;
+const labelColumns = "@container (inline-size > 600px) 220px 1fr, 1fr";
+const productRowColumns = "@container (inline-size > 500px) auto 1fr, 1fr";
+const weekdayColumns = "@container (inline-size > 480px) 140px 1fr 1fr, 100px 1fr 1fr";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -205,129 +208,131 @@ export default function LinkPage() {
         <button disabled={saving} onClick={discard}></button>
       </SaveBar>
 
-      <s-stack direction="block" gap="large">
-        <s-grid gridTemplateColumns="220px 1fr" gap="large" alignItems="center">
-          <s-text type="strong">Select Products</s-text>
-          <s-section>
-            <s-grid gridTemplateColumns="auto 1fr" gap="base" alignItems="center">
-              {loaded.productsFromUrl ? null : (
-                <ClickButton variant="primary" disabled={saving} onClick={openPicker}>
-                  Select Products
-                </ClickButton>
-              )}
-              {loadedCopy ? (
-                <s-box padding="base" borderRadius="base" background="base" borderWidth="base">
-                  <s-text>{loadedCopy}</s-text>
+      <s-query-container>
+        <s-stack direction="block" gap="large">
+          <s-grid gridTemplateColumns={labelColumns} gap="large" alignItems="start">
+            <s-text type="strong">Select Products</s-text>
+            <s-section>
+              <s-grid gridTemplateColumns={productRowColumns} gap="base" alignItems="center">
+                {loaded.productsFromUrl ? null : (
+                  <ClickButton variant="primary" disabled={saving} onClick={openPicker}>
+                    Select Products
+                  </ClickButton>
+                )}
+                {loadedCopy ? (
+                  <s-box padding="base" borderRadius="base" background="base" borderWidth="base">
+                    <s-text>{loadedCopy}</s-text>
+                  </s-box>
+                ) : (
+                  <s-text color="subdued">{countLabel(selected.length)}</s-text>
+                )}
+              </s-grid>
+            </s-section>
+          </s-grid>
+
+          {saveFetcher.data?.error ? (
+            <s-banner tone="critical" heading="Could not save">
+              {saveFetcher.data.error}
+            </s-banner>
+          ) : null}
+
+          {selected.length ? (
+            <s-stack direction="block" gap="large">
+              {differ ? (
+                <s-banner tone="info">
+                  Selected products have different settings. Saving applies this form to all of them.
+                </s-banner>
+              ) : null}
+
+              <s-grid gridTemplateColumns={labelColumns} gap="large" alignItems="start">
+                <s-stack direction="block" gap="small-200">
+                  <s-heading>Block dates</s-heading>
+                  <s-paragraph color="subdued">Block any dates you want on calendar</s-paragraph>
+                </s-stack>
+                <s-box padding="base" borderWidth="base" borderRadius="base">
+                  <BlockDatesField
+                    dates={form.blockDates}
+                    onChange={(blockDates) => updateForm({ blockDates })}
+                  />
                 </s-box>
-              ) : (
-                <s-text color="subdued">{countLabel(selected.length)}</s-text>
-              )}
-            </s-grid>
-          </s-section>
-        </s-grid>
+              </s-grid>
 
-        {saveFetcher.data?.error ? (
-          <s-banner tone="critical" heading="Could not save">
-            {saveFetcher.data.error}
-          </s-banner>
-        ) : null}
-
-        {selected.length ? (
-          <s-stack direction="block" gap="large">
-            {differ ? (
-              <s-banner tone="info">
-                Selected products have different settings. Saving applies this form to all of them.
-              </s-banner>
-            ) : null}
-
-            <s-grid gridTemplateColumns="220px 1fr" gap="large" alignItems="start">
-              <s-stack direction="block" gap="small-200">
-                <s-heading>Block dates</s-heading>
-                <s-paragraph color="subdued">Block any dates you want on calendar</s-paragraph>
-              </s-stack>
-              <s-box padding="base" borderWidth="base" borderRadius="base">
-                <BlockDatesField
-                  dates={form.blockDates}
-                  onChange={(blockDates) => updateForm({ blockDates })}
-                />
-              </s-box>
-            </s-grid>
-
-            <s-grid gridTemplateColumns="220px 1fr" gap="large" alignItems="start">
-              <s-heading>Availability</s-heading>
-              <s-box padding="base" borderWidth="base" borderRadius="base">
-                <s-stack direction="block" gap="base">
-                  <NumberField
-                    label="Calendar Start"
-                    details={offsetCopy(form.calendarStartDays, false)}
-                    min={0}
-                    step={1}
-                    value={String(form.calendarStartDays)}
-                    suffix="days"
-                    onChange={(event) => updateForm({ calendarStartDays: fieldValue(event) })}
-                  ></NumberField>
-                  <NumberField
-                    label="Calendar End"
-                    details={offsetCopy(form.calendarEndDays, true)}
-                    min={0}
-                    step={1}
-                    value={String(form.calendarEndDays)}
-                    suffix="days"
-                    onChange={(event) => updateForm({ calendarEndDays: fieldValue(event) })}
-                  ></NumberField>
-                  <s-stack direction="block" gap="small-200">
-                    <s-text type="strong">Active Weekdays</s-text>
-                    {WEEKDAY_KEYS.map((day) => (
-                      <s-grid key={day} gridTemplateColumns="140px 1fr 1fr" gap="base" alignItems="center">
-                        <s-text>{WEEKDAY_LABELS[day]}</s-text>
-                        <Checkbox
-                          label="Start"
-                          checked={form.weekdays[day]?.start !== false}
-                          onChange={(event) => updateWeekday(day, "start", fieldChecked(event))}
-                        ></Checkbox>
-                        <Checkbox
-                          label="End"
-                          checked={form.weekdays[day]?.end !== false}
-                          onChange={(event) => updateWeekday(day, "end", fieldChecked(event))}
-                        ></Checkbox>
-                      </s-grid>
-                    ))}
+              <s-grid gridTemplateColumns={labelColumns} gap="large" alignItems="start">
+                <s-heading>Availability</s-heading>
+                <s-box padding="base" borderWidth="base" borderRadius="base">
+                  <s-stack direction="block" gap="base">
+                    <NumberField
+                      label="Calendar Start"
+                      details={offsetCopy(form.calendarStartDays, false)}
+                      min={0}
+                      step={1}
+                      value={String(form.calendarStartDays)}
+                      suffix="days"
+                      onChange={(event) => updateForm({ calendarStartDays: fieldValue(event) })}
+                    ></NumberField>
+                    <NumberField
+                      label="Calendar End"
+                      details={offsetCopy(form.calendarEndDays, true)}
+                      min={0}
+                      step={1}
+                      value={String(form.calendarEndDays)}
+                      suffix="days"
+                      onChange={(event) => updateForm({ calendarEndDays: fieldValue(event) })}
+                    ></NumberField>
+                    <s-stack direction="block" gap="small-200">
+                      <s-text type="strong">Active Weekdays</s-text>
+                      {WEEKDAY_KEYS.map((day) => (
+                        <s-grid key={day} gridTemplateColumns={weekdayColumns} gap="base" alignItems="center">
+                          <s-text>{WEEKDAY_LABELS[day]}</s-text>
+                          <Checkbox
+                            label="Start"
+                            checked={form.weekdays[day]?.start !== false}
+                            onChange={(event) => updateWeekday(day, "start", fieldChecked(event))}
+                          ></Checkbox>
+                          <Checkbox
+                            label="End"
+                            checked={form.weekdays[day]?.end !== false}
+                            onChange={(event) => updateWeekday(day, "end", fieldChecked(event))}
+                          ></Checkbox>
+                        </s-grid>
+                      ))}
+                    </s-stack>
                   </s-stack>
-                </s-stack>
-              </s-box>
-            </s-grid>
+                </s-box>
+              </s-grid>
 
-            <s-grid gridTemplateColumns="220px 1fr" gap="large" alignItems="start">
-              <s-stack direction="block" gap="small-200">
-                <s-heading>Deposit</s-heading>
-                <s-paragraph color="subdued">
-                  Deposit product will be charged at same time as order. You will be able to refund it manually via
-                  partial refund of shopify.
-                </s-paragraph>
-              </s-stack>
-              <s-box padding="base" borderWidth="base" borderRadius="base">
-                <s-stack direction="block" gap="base">
-                  <NumberField
-                    label="Deposit Amount"
-                    min={0}
-                    step={1}
-                    value={String(form.depositAmount)}
-                    onChange={(event) => updateForm({ depositAmount: fieldValue(event) })}
-                  ></NumberField>
-                  <NumberField
-                    label="Deposit %"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={String(form.depositPercent)}
-                    onChange={(event) => updateForm({ depositPercent: fieldValue(event) })}
-                  ></NumberField>
+              <s-grid gridTemplateColumns={labelColumns} gap="large" alignItems="start">
+                <s-stack direction="block" gap="small-200">
+                  <s-heading>Deposit</s-heading>
+                  <s-paragraph color="subdued">
+                    Deposit product will be charged at same time as order. You will be able to refund it manually via
+                    partial refund of shopify.
+                  </s-paragraph>
                 </s-stack>
-              </s-box>
-            </s-grid>
-          </s-stack>
-        ) : null}
-      </s-stack>
+                <s-box padding="base" borderWidth="base" borderRadius="base">
+                  <s-stack direction="block" gap="base">
+                    <NumberField
+                      label="Deposit Amount"
+                      min={0}
+                      step={1}
+                      value={String(form.depositAmount)}
+                      onChange={(event) => updateForm({ depositAmount: fieldValue(event) })}
+                    ></NumberField>
+                    <NumberField
+                      label="Deposit %"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={String(form.depositPercent)}
+                      onChange={(event) => updateForm({ depositPercent: fieldValue(event) })}
+                    ></NumberField>
+                  </s-stack>
+                </s-box>
+              </s-grid>
+            </s-stack>
+          ) : null}
+        </s-stack>
+      </s-query-container>
     </s-page>
   );
 }

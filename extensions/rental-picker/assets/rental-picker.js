@@ -49,7 +49,7 @@
     const variantIdInput = root.querySelector("[data-rental-variant-id]");
     const msgUnavailable = root.getAttribute("data-msg-unavailable") || "Grey dates are unavailable because they overlap an existing booking.";
     const msgAvailable = root.getAttribute("data-msg-available") || "All dates available";
-    const msgOverlap = root.getAttribute("data-msg-overlap") || "These dates overlap an existing booking. Choose another start date.";
+    const msgOverlap = root.getAttribute("data-msg-overlap") || "This rental includes a date that is not available. Choose another start date.";
     const msgAvailError = root.getAttribute("data-msg-availability-error") || "Could not check availability. Try again.";
     const msgDuration = root.getAttribute("data-msg-duration") || "Duration";
     const msgClear = root.getAttribute("data-msg-clear") || "Clear";
@@ -396,7 +396,18 @@
         );
       }
       if (!state.start) return false;
-      return isBlockedDate(state.start) || !weekdayAllowed(state.start, "start") || isStartBlocked(state.start);
+      return (
+        isBlockedDate(state.start) ||
+        !weekdayAllowed(state.start, "start") ||
+        isStartBlocked(state.start) ||
+        rentalWindowHitsBlockDate(state.start)
+      );
+    }
+
+    function rentalWindowHitsBlockDate(start) {
+      if (!start) return false;
+      const days = Math.max(1, Number(state.duration) || 1);
+      return rangeHasBlockedDate(start, addDays(start, days - 1));
     }
 
     function isStartBlocked(date) {

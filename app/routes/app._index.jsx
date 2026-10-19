@@ -20,6 +20,9 @@ const SORT_OPTIONS = [
 ];
 
 const PAGE_SIZE = 20;
+const statColumns = "@container (inline-size > 400px) 1fr 1fr, 1fr";
+const summaryColumns = "minmax(0, 1fr) auto";
+const bulkColumns = "@container (inline-size > 640px) minmax(0, 1fr) auto, minmax(0, 1fr)";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -156,104 +159,42 @@ export default function Dashboard() {
 
   return (
     <s-page heading="Dashboard" inlineSize="large">
-      <s-button slot="primary-action" variant="primary" href="/app/link">
-        Link Products
-      </s-button>
-      <s-button slot="secondary-actions" href="/app/settings">
-        Settings
-      </s-button>
-      <s-button slot="secondary-actions" href={data.themeEditorUrl} target="_blank" icon="theme">
-        App block
-      </s-button>
-
       <s-stack direction="block" gap="base">
-        <s-grid gridTemplateColumns="1fr 1fr" gap="base">
-          <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-            <s-stack direction="block" gap="base">
-              <s-text>Last 30 days</s-text>
-              <s-grid gridTemplateColumns="1fr 1fr" gap="base">
-                <s-stack direction="block" gap="small-200">
-                  <s-heading>{String(data.stats.ordersMade)}</s-heading>
-                  <s-text color="subdued">Orders made</s-text>
-                </s-stack>
-                <s-stack direction="block" gap="small-200">
-                  <s-heading>{String(data.stats.productsBooked)}</s-heading>
-                  <s-text color="subdued">Products booked</s-text>
-                </s-stack>
-              </s-grid>
-            </s-stack>
-          </s-box>
-          <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-            <s-grid gridTemplateColumns="1fr 220px" gap="base" alignItems="center">
+        <s-stack direction="inline" gap="small-200" justifyContent="end" alignItems="center" inlineSize="100%">
+          <s-button href="/app/settings">Settings</s-button>
+          <s-button variant="primary" href="/app/link">
+            Link Products
+          </s-button>
+        </s-stack>
+        <s-query-container>
+          <s-grid gridTemplateColumns={statColumns} gap="base">
+            <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+              <s-stack direction="block" gap="base">
+                <s-text>Last 30 days</s-text>
+                <s-query-container>
+                  <s-grid gridTemplateColumns="1fr 1fr" gap="base">
+                    <s-stack direction="block" gap="small-200">
+                      <s-heading>{String(data.stats.ordersMade)}</s-heading>
+                      <s-text color="subdued">Orders made</s-text>
+                    </s-stack>
+                    <s-stack direction="block" gap="small-200">
+                      <s-heading>{String(data.stats.productsBooked)}</s-heading>
+                      <s-text color="subdued">Products booked</s-text>
+                    </s-stack>
+                  </s-grid>
+                </s-query-container>
+              </s-stack>
+            </s-box>
+            <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
               <s-stack direction="block" gap="small-200">
                 <s-text>Bookings this month</s-text>
                 <s-heading>{String(data.stats.bookingsThisMonth)}</s-heading>
               </s-stack>
-              <SearchField
-                label="Search products"
-                labelAccessibilityVisibility="exclusive"
-                placeholder="Search products"
-                value={query}
-                onInput={(event) => setQuery(event.currentTarget.value)}
-              ></SearchField>
-            </s-grid>
-          </s-box>
-        </s-grid>
+            </s-box>
+          </s-grid>
+        </s-query-container>
 
-        <s-section padding="none">
-          <s-box padding="base">
-            <s-stack direction="block" gap="base">
-              <SearchField
-                label="Search products"
-                labelAccessibilityVisibility="exclusive"
-                placeholder="Search Products"
-                value={query}
-                onInput={(event) => setQuery(event.currentTarget.value)}
-              ></SearchField>
-              {checkedIds.length ? (
-                <s-grid gridTemplateColumns="1fr auto" gap="base" alignItems="center">
-                  <s-stack direction="inline" gap="small-200" alignItems="center">
-                    <s-text type="strong">{checkedIds.length} selected</s-text>
-                    <ClickButton variant="tertiary" onClick={() => setChecked({})}>
-                      Clear
-                    </ClickButton>
-                  </s-stack>
-                  <s-stack direction="inline" gap="small-200" alignItems="center">
-                    <s-button
-                      variant="secondary"
-                      href={canBulkEdit ? editProductsHref : undefined}
-                      disabled={canBulkEdit ? undefined : true}
-                      accessibilityLabel={
-                        canBulkEdit ? editProductsLabel(checked) : `Select up to ${EDIT_PRODUCT_LIMIT} products to edit`
-                      }
-                    >
-                      {editProductsLabel(checked)}
-                    </s-button>
-                    <ClickButton
-                      variant="secondary"
-                      tone="critical"
-                      loading={fetcher.state !== "idle"}
-                      onClick={() => unlink(checkedIds)}
-                    >
-                      Unlink Products
-                    </ClickButton>
-                  </s-stack>
-                </s-grid>
-              ) : (
-                <s-grid gridTemplateColumns="1fr auto" gap="base" alignItems="center">
-                  <s-text>{data.total} Products</s-text>
-                  <s-button
-                    variant="secondary"
-                    commandFor="dashboard-product-sort"
-                    command="--show"
-                    icon="chevron-down"
-                  >
-                    Sort by {sortLabel}
-                  </s-button>
-                </s-grid>
-              )}
-            </s-stack>
-          </s-box>
+        <s-section padding="none" accessibilityLabel="Linked products">
           {data.rows.length ? (
             <s-table
               loading={tableLoading}
@@ -264,35 +205,51 @@ export default function Dashboard() {
               onNextPage={() => updateParams({ page: String(data.page + 1) })}
               paginationLabel={`${from}–${to} of ${data.total}`}
             >
+              <ProductToolbar
+                slot="filters"
+                query={query}
+                onQuery={setQuery}
+                checked={checked}
+                checkedIds={checkedIds}
+                onClear={() => setChecked({})}
+                canBulkEdit={canBulkEdit}
+                editProductsHref={editProductsHref}
+                unlinkLoading={fetcher.state !== "idle"}
+                onUnlink={() => unlink(checkedIds)}
+                total={data.total}
+                sortLabel={sortLabel}
+              />
               <s-table-header-row>
-                <s-table-header>
-                  <Checkbox
-                    accessibilityLabel="Select all products on this page"
-                    checked={allChecked}
-                    onChange={() => togglePage(!allChecked)}
-                  ></Checkbox>
+                <s-table-header listSlot="primary">
+                  <s-stack direction="inline" gap="small-200" alignItems="center">
+                    <Checkbox
+                      accessibilityLabel="Select all products on this page"
+                      checked={allChecked}
+                      onChange={() => togglePage(!allChecked)}
+                    ></Checkbox>
+                    <s-text>Product</s-text>
+                  </s-stack>
                 </s-table-header>
-                <s-table-header listSlot="primary">Product</s-table-header>
-                <s-table-header>Rental</s-table-header>
-                <s-table-header></s-table-header>
+                <s-table-header listSlot="labeled">Rental</s-table-header>
+                <s-table-header listSlot="secondary"></s-table-header>
               </s-table-header-row>
               <s-table-body>
                 {data.rows.map((row) => (
                   <s-table-row key={row.id}>
                     <s-table-cell>
-                      <Checkbox
-                        accessibilityLabel={`Select ${row.title}`}
-                        checked={Boolean(checked[row.id])}
-                        onChange={(event) => {
-                          const target = event.currentTarget || event.target;
-                          toggleRow(row, Boolean(target.checked));
-                        }}
-                      ></Checkbox>
-                    </s-table-cell>
-                    <s-table-cell>
                       <s-stack direction="inline" gap="base" alignItems="center">
+                        <Checkbox
+                          accessibilityLabel={`Select ${row.title}`}
+                          checked={Boolean(checked[row.id])}
+                          onChange={(event) => {
+                            const target = event.currentTarget || event.target;
+                            toggleRow(row, Boolean(target.checked));
+                          }}
+                        ></Checkbox>
                         <s-thumbnail src={row.image} alt={row.title} size="small"></s-thumbnail>
-                        <s-text type="strong">{row.title}</s-text>
+                        <s-box minInlineSize="0">
+                          <s-text type="strong">{row.title}</s-text>
+                        </s-box>
                       </s-stack>
                     </s-table-cell>
                     <s-table-cell>
@@ -344,14 +301,31 @@ export default function Dashboard() {
               </s-table-body>
             </s-table>
           ) : (
-            <s-box padding="large">
-              <s-stack direction="block" gap="base" alignItems="center">
-                <s-heading>{data.q ? "No products match that search" : "No linked products yet"}</s-heading>
-                <s-paragraph color="subdued">
-                  Link a product to choose how customers book it. The rental picker shows on linked products only.
-                </s-paragraph>
-              </s-stack>
-            </s-box>
+            <>
+              <s-box padding="base">
+                <ProductToolbar
+                  query={query}
+                  onQuery={setQuery}
+                  checked={checked}
+                  checkedIds={checkedIds}
+                  onClear={() => setChecked({})}
+                  canBulkEdit={canBulkEdit}
+                  editProductsHref={editProductsHref}
+                  unlinkLoading={fetcher.state !== "idle"}
+                  onUnlink={() => unlink(checkedIds)}
+                  total={data.total}
+                  sortLabel={sortLabel}
+                />
+              </s-box>
+              <s-box padding="large">
+                <s-stack direction="block" gap="base" alignItems="center">
+                  <s-heading>{data.q ? "No products match that search" : "No linked products yet"}</s-heading>
+                  <s-paragraph color="subdued">
+                    Link a product to choose how customers book it. The rental picker shows on linked products only.
+                  </s-paragraph>
+                </s-stack>
+              </s-box>
+            </>
           )}
         </s-section>
       </s-stack>
@@ -370,10 +344,82 @@ export default function Dashboard() {
   );
 }
 
+/* eslint-disable react/prop-types */
+function ProductToolbar({
+  slot,
+  query,
+  onQuery,
+  checked,
+  checkedIds,
+  onClear,
+  canBulkEdit,
+  editProductsHref,
+  unlinkLoading,
+  onUnlink,
+  total,
+  sortLabel,
+}) {
+  return (
+    <s-stack {...(slot ? { slot } : {})} direction="block" gap="base">
+      <SearchField
+        label="Search products"
+        labelAccessibilityVisibility="exclusive"
+        placeholder="Search Products"
+        value={query}
+        onInput={(event) => onQuery(event.currentTarget.value)}
+      ></SearchField>
+      {checkedIds.length ? (
+        <s-query-container>
+          <s-grid gridTemplateColumns={bulkColumns} gap="small-200" alignItems="center">
+            <s-stack direction="block" gap="small-200">
+              <s-stack direction="inline" gap="small-200" alignItems="center">
+                <s-text type="strong">{checkedIds.length} selected</s-text>
+                <ClickButton variant="tertiary" onClick={onClear}>
+                  Clear
+                </ClickButton>
+              </s-stack>
+              <s-text color="subdued">{selectionDetail(checked)}</s-text>
+            </s-stack>
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              <s-button
+                variant="secondary"
+                href={canBulkEdit ? editProductsHref : undefined}
+                disabled={canBulkEdit ? undefined : true}
+                accessibilityLabel={
+                  canBulkEdit ? editProductsLabel(checked) : `Select up to ${EDIT_PRODUCT_LIMIT} products to edit`
+                }
+              >
+                Edit products
+              </s-button>
+              <ClickButton variant="secondary" tone="critical" loading={unlinkLoading} onClick={onUnlink}>
+                Unlink products
+              </ClickButton>
+            </s-stack>
+          </s-grid>
+        </s-query-container>
+      ) : (
+        <s-grid gridTemplateColumns={summaryColumns} gap="base" alignItems="center">
+          <s-text>{total} Products</s-text>
+          <s-button variant="secondary" commandFor="dashboard-product-sort" command="--show" icon="chevron-down">
+            Sort by {sortLabel}
+          </s-button>
+        </s-grid>
+      )}
+    </s-stack>
+  );
+}
+/* eslint-enable react/prop-types */
+
+function selectionDetail(selected) {
+  const ids = Object.keys(selected);
+  if (ids.length === 1) return `${selected[ids[0]]} — rent settings loaded`;
+  return `${ids.length} products — rent settings loaded`;
+}
+
 function editProductsLabel(selected) {
   const ids = Object.keys(selected);
-  if (ids.length === 1) return `Edit Products (${selected[ids[0]]} - Rent settings loaded)`;
-  return `Edit Products (${ids.length} products - Rent settings loaded)`;
+  if (ids.length === 1) return `Edit products (${selected[ids[0]]} — rent settings loaded)`;
+  return `Edit products (${ids.length} products — rent settings loaded)`;
 }
 
 function presentRow(row, shopDomain) {
