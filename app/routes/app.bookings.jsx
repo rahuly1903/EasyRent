@@ -184,7 +184,13 @@ export default function BookingsPage() {
 
   return (
     <s-page heading="Bookings">
+      <s-link slot="breadcrumb-actions" href="/app">
+        Dashboard
+      </s-link>
       <s-stack direction="block" gap="base">
+        <s-button href="/app" icon="arrow-left" variant="tertiary">
+          Back
+        </s-button>
         <s-section padding="none">
           <TabsBar
             tabs={TABS}

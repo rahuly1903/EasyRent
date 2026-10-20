@@ -210,6 +210,9 @@ export default function LinkPage() {
 
       <s-query-container>
         <s-stack direction="block" gap="large">
+          <s-button href="/app" icon="arrow-left" variant="tertiary">
+            Back
+          </s-button>
           <s-grid gridTemplateColumns={labelColumns} gap="large" alignItems="start">
             <s-text type="strong">Select Products</s-text>
             <s-section>
