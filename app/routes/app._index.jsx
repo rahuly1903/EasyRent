@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFetcher, useLoaderData, useLocation, useNavigation, useRouteError, useSearchParams } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -7,6 +7,7 @@ import { getOrCreateShop } from "../services/shop.server";
 import {
   dashboardStats,
   deactivateUnlinkedUnits,
+  linkRentTaggedProducts,
   listLinkedProducts,
   unlinkProducts,
 } from "../services/rental-config.server";
@@ -65,10 +66,26 @@ export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = await getOrCreateShop(session.shop);
   const form = await request.formData();
-  if (form.get("intent") !== "unlink") return { ok: false };
-  const productIds = parseIds(form.get("productIds"));
-  await unlinkProducts({ admin, shopId: shop.id, productIds });
-  return { ok: true, intent: "unlink" };
+  const intent = String(form.get("intent") || "");
+
+  if (intent === "unlink") {
+    const productIds = parseIds(form.get("productIds"));
+    await unlinkProducts({ admin, shopId: shop.id, productIds });
+    return { ok: true, intent: "unlink" };
+  }
+
+  if (intent === "link-rent-tags") {
+    try {
+      const result = await linkRentTaggedProducts({ admin, shopId: shop.id });
+      return { ok: true, intent, ...result };
+    } catch (error) {
+      console.error("[app] link rent tags", error);
+      const message = error instanceof Error ? error.message : "Could not link products";
+      return { ok: false, intent, error: message || "Could not link products" };
+    }
+  }
+
+  return { ok: false };
 };
 
 export default function Dashboard() {
@@ -80,6 +97,8 @@ export default function Dashboard() {
   const location = useLocation();
   const [checked, setChecked] = useState({});
   const [query, setQuery] = useState(data.q || "");
+  const appliedLink = useRef(null);
+  const linking = fetcher.state !== "idle" && fetcher.formData?.get("intent") === "link-rent-tags";
   const tableLoading = navigation.state === "loading" && navigation.location?.pathname === location.pathname;
   const from = data.total === 0 ? 0 : (data.page - 1) * data.pageSize + 1;
   const to = Math.min(data.page * data.pageSize, data.total);
@@ -101,6 +120,18 @@ export default function Dashboard() {
       shopify.toast.show("Products unlinked");
       setChecked({});
     }
+  }, [fetcher.state, fetcher.data, shopify]);
+
+  useEffect(() => {
+    const result = fetcher.data;
+    if (fetcher.state !== "idle" || !result || result.intent !== "link-rent-tags") return;
+    if (result === appliedLink.current) return;
+    appliedLink.current = result;
+    if (!result.ok) {
+      shopify.toast.show(result.error || "Could not link products", { isError: true });
+      return;
+    }
+    shopify.toast.show(linkAllSummary(result));
   }, [fetcher.state, fetcher.data, shopify]);
 
   useEffect(() => {
@@ -129,6 +160,12 @@ export default function Dashboard() {
     const body = new FormData();
     body.set("intent", "unlink");
     body.set("productIds", JSON.stringify(ids));
+    fetcher.submit(body, { method: "POST" });
+  }
+
+  function addAllProducts() {
+    const body = new FormData();
+    body.set("intent", "link-rent-tags");
     fetcher.submit(body, { method: "POST" });
   }
 
@@ -162,6 +199,13 @@ export default function Dashboard() {
       <s-stack direction="block" gap="base">
         <s-stack direction="inline" gap="small-200" justifyContent="end" alignItems="center" inlineSize="100%">
           <s-button href="/app/settings">Settings</s-button>
+          <ClickButton
+            loading={linking}
+            disabled={fetcher.state !== "idle" ? true : undefined}
+            onClick={addAllProducts}
+          >
+            Add all products
+          </ClickButton>
           <s-button variant="primary" href="/app/link">
             Link Products
           </s-button>
@@ -409,6 +453,19 @@ function ProductToolbar({
   );
 }
 /* eslint-enable react/prop-types */
+
+function linkAllSummary(result) {
+  const total = Number(result.total) || 0;
+  if (!total) return "No active products with the Rent tag";
+  const ready = Number(result.readyToShip) || 0;
+  const fifteen = total - ready;
+  const both = Number(result.both) || 0;
+  const parts = [`${total} product${total === 1 ? "" : "s"} linked`];
+  if (ready) parts.push(`${ready} set to 2 days`);
+  if (fifteen) parts.push(`${fifteen} set to 15 days`);
+  if (both) parts.push(`${both} had both tags and used 2 days`);
+  return `${parts.join(". ")}.`;
+}
 
 function selectionDetail(selected) {
   const ids = Object.keys(selected);

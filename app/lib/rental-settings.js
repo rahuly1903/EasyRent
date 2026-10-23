@@ -80,6 +80,26 @@ export function metafieldPayload(settings) {
   };
 }
 
+// Rent is required. Ready To Ship sets Calendar Start to 2 days and wins when
+// Made to order is also present. Rent alone, or Rent + Made to order, uses 15.
+export function rentalLinkFromTags(tags) {
+  const names = new Set(
+    (Array.isArray(tags) ? tags : [])
+      .map((tag) => String(tag || "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+  if (!names.has("rent")) return null;
+  const readyToShip = names.has("ready to ship");
+  const madeToOrder = names.has("made to order");
+  return {
+    calendarStartDays: readyToShip ? 2 : 15,
+    readyToShip,
+    madeToOrder,
+    both: readyToShip && madeToOrder,
+    rentOnly: !readyToShip && !madeToOrder,
+  };
+}
+
 function normalizeWeekdays(value) {
   const source = value && typeof value === "object" ? value : {};
   const weekdays = {};

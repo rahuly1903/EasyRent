@@ -1,8 +1,10 @@
 import prisma from "../db.server";
 import { quantityFromVariantNode } from "../lib/rentable-quantity";
 import {
+  defaultRentalSettings,
   metafieldPayload,
   normalizeRentalSettings,
+  rentalLinkFromTags,
 } from "../lib/rental-settings";
 import { toProductGid } from "../lib/shopify-ids";
 import { syncProductUnits, deactivateProductUnits } from "./rental-unit.server";
@@ -54,6 +56,39 @@ const DELETE_METAFIELDS = `#graphql
     metafieldsDelete(metafields: $metafields) {
       deletedMetafields { key ownerId }
       userErrors { field message }
+    }
+  }
+`;
+
+const RENT_TAGGED_PRODUCTS = `#graphql
+  query RentTaggedProducts($cursor: String) {
+    products(first: 50, after: $cursor, query: "tag:Rent status:active") {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        id
+        title
+        handle
+        tags
+        featuredImage {
+          url
+        }
+        variants(first: 100) {
+          nodes {
+            id
+            title
+            selectedOptions {
+              name
+              value
+            }
+            rentableQuantity: metafield(key: "rentable_quantity") {
+              jsonValue
+            }
+          }
+        }
+      }
     }
   }
 `;
@@ -176,6 +211,77 @@ export async function saveLinkedProducts({ admin, shopId, productIds, settings }
   return saved;
 }
 
+export async function linkRentTaggedProducts({ admin, shopId }) {
+  const products = await fetchRentTaggedProducts(admin);
+  const rentProducts = [];
+  const seen = new Set();
+  for (const product of products) {
+    if (!product?.id || seen.has(product.id)) continue;
+    if (!rentalLinkFromTags(product.tags)) continue;
+    seen.add(product.id);
+    rentProducts.push(product);
+  }
+
+  const existing = await configsByProductId(
+    shopId,
+    rentProducts.map((product) => product.id),
+  );
+  const counts = {
+    total: 0,
+    linked: 0,
+    updated: 0,
+    readyToShip: 0,
+    madeToOrder: 0,
+    rentOnly: 0,
+    both: 0,
+  };
+  const saved = [];
+
+  for (const product of rentProducts) {
+    const link = rentalLinkFromTags(product.tags);
+    if (!link) continue;
+    const current = existing.get(product.id);
+    const base = current ? normalizeRentalSettings(current) : defaultRentalSettings();
+    const settings = normalizeRentalSettings({
+      ...base,
+      calendarStartDays: link.calendarStartDays,
+    });
+    const variants = product.variants?.nodes || [];
+    await prisma.productRentalConfig.upsert({
+      where: { shopId_productId: { shopId, productId: product.id } },
+      create: {
+        shopId,
+        productId: product.id,
+        ...snapshot(product, variants),
+        ...persistedSettings(settings),
+        active: true,
+      },
+      update: {
+        ...snapshot(product, variants),
+        ...persistedSettings(settings),
+        active: true,
+      },
+    });
+    await syncProductUnits({
+      shopId,
+      productId: product.id,
+      productTitle: product.title,
+      variants,
+    });
+    saved.push({ productId: product.id, settings });
+    counts.total += 1;
+    if (current?.active) counts.updated += 1;
+    else counts.linked += 1;
+    if (link.readyToShip) counts.readyToShip += 1;
+    else if (link.madeToOrder) counts.madeToOrder += 1;
+    else counts.rentOnly += 1;
+    if (link.both) counts.both += 1;
+  }
+
+  await writeMetafieldsForRows(admin, saved);
+  return counts;
+}
+
 export async function unlinkProducts({ admin, shopId, productIds }) {
   const ids = uniqueProductIds(productIds);
   if (!ids.length) return [];
@@ -257,6 +363,51 @@ function persistedSettings(settings) {
 async function fetchProducts(admin, ids) {
   const data = await adminGraphql(admin, PRODUCTS_BY_ID, { ids });
   return (data?.nodes || []).filter((node) => node?.id);
+}
+
+async function fetchRentTaggedProducts(admin) {
+  const products = [];
+  const seenCursors = new Set();
+  let cursor = null;
+
+  for (let page = 0; page < 200; page += 1) {
+    const data = await adminGraphql(admin, RENT_TAGGED_PRODUCTS, { cursor });
+    const connection = data?.products;
+    for (const node of connection?.nodes || []) {
+      if (node?.id) products.push(node);
+    }
+    const next = connection?.pageInfo?.hasNextPage ? connection.pageInfo.endCursor : null;
+    if (!next || seenCursors.has(next)) break;
+    seenCursors.add(next);
+    cursor = next;
+  }
+
+  return products;
+}
+
+async function configsByProductId(shopId, productIds) {
+  const byId = new Map();
+  for (let i = 0; i < productIds.length; i += 100) {
+    const rows = await prisma.productRentalConfig.findMany({
+      where: { shopId, productId: { in: productIds.slice(i, i + 100) } },
+    });
+    for (const row of rows) byId.set(row.productId, row);
+  }
+  return byId;
+}
+
+async function writeMetafieldsForRows(admin, rows) {
+  for (let i = 0; i < rows.length; i += METAFIELD_BATCH) {
+    const metafields = rows.slice(i, i + METAFIELD_BATCH).map((row) => ({
+      ownerId: row.productId,
+      key: "rental_settings",
+      type: "json",
+      value: JSON.stringify(metafieldPayload(row.settings)),
+    }));
+    const data = await adminGraphql(admin, SET_METAFIELDS, { metafields });
+    const errors = data?.metafieldsSet?.userErrors || [];
+    if (errors.length) throw new Error(errors.map((error) => error.message).join("; "));
+  }
 }
 
 async function writeMetafields(admin, productIds, settings) {
