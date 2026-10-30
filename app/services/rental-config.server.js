@@ -6,6 +6,7 @@ import {
   normalizeRentalSettings,
   rentalLinkFromTags,
 } from "../lib/rental-settings";
+import { linkedProductsToCsv, normalizeProductHandle, parseProductCsv } from "../lib/product-csv";
 import { toProductGid } from "../lib/shopify-ids";
 import { syncProductUnits, deactivateProductUnits } from "./rental-unit.server";
 
@@ -13,6 +14,8 @@ const RENT_FOR_NAME = /rent\s*for|duration/i;
 const DAY_VALUE = /(\d+)\s*-?\s*days?/i;
 const MAX_PRODUCTS = 50;
 const METAFIELD_BATCH = 25;
+const HANDLE_BATCH = 10;
+const IMPORT_LIMIT = 1000;
 
 const PRODUCTS_BY_ID = `#graphql
   query RentalProductsById($ids: [ID!]!) {
@@ -213,6 +216,63 @@ export async function saveLinkedProducts({ admin, shopId, productIds, settings }
 
 export async function linkRentTaggedProducts({ admin, shopId }) {
   const products = await fetchRentTaggedProducts(admin);
+  return linkProductsWithTagRules({ admin, shopId, products });
+}
+
+export async function linkedProductsCsv(shopId) {
+  const rows = await prisma.productRentalConfig.findMany({
+    where: { shopId, active: true },
+    select: { productTitle: true, productHandle: true },
+    orderBy: { productTitle: "asc" },
+  });
+  return { csv: linkedProductsToCsv(rows), count: rows.length };
+}
+
+export async function importProductsByHandle({ admin, shopId, csv }) {
+  const parsed = parseProductCsv(csv);
+  if (!parsed.length) throw new Error("The CSV needs product title and handle columns");
+
+  const handles = [];
+  const seen = new Set();
+  let missingHandle = 0;
+  for (const row of parsed) {
+    const handle = normalizeProductHandle(row.handle);
+    if (!handle) {
+      missingHandle += 1;
+      continue;
+    }
+    if (seen.has(handle)) continue;
+    seen.add(handle);
+    handles.push(handle);
+  }
+  if (!handles.length) throw new Error("The CSV has no product handles");
+  if (handles.length > IMPORT_LIMIT) throw new Error(`Import up to ${IMPORT_LIMIT} products at a time`);
+
+  const products = await fetchProductsByHandles(admin, handles);
+  const byHandle = new Map(
+    products.filter((product) => product?.handle).map((product) => [product.handle.toLowerCase(), product]),
+  );
+  const missing = [];
+  const skipped = [];
+  const toLink = [];
+  for (const handle of handles) {
+    const product = byHandle.get(handle);
+    if (!product) {
+      missing.push(handle);
+      continue;
+    }
+    if (!rentalLinkFromTags(product.tags)) {
+      skipped.push(product.title || handle);
+      continue;
+    }
+    toLink.push(product);
+  }
+
+  const counts = await linkProductsWithTagRules({ admin, shopId, products: toLink });
+  return { ...counts, missing, skipped, missingHandle };
+}
+
+async function linkProductsWithTagRules({ admin, shopId, products }) {
   const rentProducts = [];
   const seen = new Set();
   for (const product of products) {
@@ -360,9 +420,51 @@ function persistedSettings(settings) {
   };
 }
 
+const PRODUCT_NODE_FIELDS = `
+  id
+  title
+  handle
+  tags
+  featuredImage { url }
+  variants(first: 100) {
+    nodes {
+      id
+      title
+      selectedOptions { name value }
+      rentableQuantity: metafield(key: "rentable_quantity") { jsonValue }
+    }
+  }
+`;
+
 async function fetchProducts(admin, ids) {
   const data = await adminGraphql(admin, PRODUCTS_BY_ID, { ids });
   return (data?.nodes || []).filter((node) => node?.id);
+}
+
+async function fetchProductsByHandles(admin, handles) {
+  const products = [];
+  for (let i = 0; i < handles.length; i += HANDLE_BATCH) {
+    const batch = handles.slice(i, i + HANDLE_BATCH);
+    const varDefs = batch.map((_, index) => `$h${index}: ProductIdentifierInput!`).join(", ");
+    const fields = batch
+      .map((_, index) => `p${index}: productByIdentifier(identifier: $h${index}) { ${PRODUCT_NODE_FIELDS} }`)
+      .join("\n");
+    const query = `#graphql
+      query ProductsByHandles(${varDefs}) {
+        ${fields}
+      }
+    `;
+    const variables = {};
+    batch.forEach((handle, index) => {
+      variables[`h${index}`] = { handle };
+    });
+    const data = await adminGraphql(admin, query, variables);
+    for (let index = 0; index < batch.length; index += 1) {
+      const product = data?.[`p${index}`];
+      if (product?.id) products.push(product);
+    }
+  }
+  return products;
 }
 
 async function fetchRentTaggedProducts(admin) {

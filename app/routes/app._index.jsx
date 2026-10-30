@@ -7,7 +7,9 @@ import { getOrCreateShop } from "../services/shop.server";
 import {
   dashboardStats,
   deactivateUnlinkedUnits,
+  importProductsByHandle,
   linkRentTaggedProducts,
+  linkedProductsCsv,
   listLinkedProducts,
   unlinkProducts,
 } from "../services/rental-config.server";
@@ -79,14 +81,40 @@ export const action = async ({ request }) => {
       const result = await linkRentTaggedProducts({ admin, shopId: shop.id });
       return { ok: true, intent, ...result };
     } catch (error) {
-      console.error("[app] link rent tags", error);
-      const message = error instanceof Error ? error.message : "Could not link products";
-      return { ok: false, intent, error: message || "Could not link products" };
+      return actionFailure(intent, error, "Could not link products");
+    }
+  }
+
+  if (intent === "export-linked") {
+    try {
+      const result = await linkedProductsCsv(shop.id);
+      return { ok: true, intent, filename: "linked-products.csv", ...result };
+    } catch (error) {
+      return actionFailure(intent, error, "Could not export products");
+    }
+  }
+
+  if (intent === "import-linked") {
+    try {
+      const result = await importProductsByHandle({
+        admin,
+        shopId: shop.id,
+        csv: String(form.get("csv") || ""),
+      });
+      return { ok: true, intent, ...result };
+    } catch (error) {
+      return actionFailure(intent, error, "Could not import products");
     }
   }
 
   return { ok: false };
 };
+
+function actionFailure(intent, error, fallback) {
+  console.error(`[app] ${intent}`, error);
+  const message = error instanceof Error ? error.message : fallback;
+  return { ok: false, intent, error: message || fallback };
+}
 
 export default function Dashboard() {
   const data = useLoaderData();
@@ -98,7 +126,14 @@ export default function Dashboard() {
   const [checked, setChecked] = useState({});
   const [query, setQuery] = useState(data.q || "");
   const appliedLink = useRef(null);
-  const linking = fetcher.state !== "idle" && fetcher.formData?.get("intent") === "link-rent-tags";
+  const appliedExport = useRef(null);
+  const appliedImport = useRef(null);
+  const importInputRef = useRef(null);
+  const [importFile, setImportFile] = useState(null);
+  const busy = fetcher.state !== "idle";
+  const linking = busy && fetcher.formData?.get("intent") === "link-rent-tags";
+  const exporting = busy && fetcher.formData?.get("intent") === "export-linked";
+  const importing = busy && fetcher.formData?.get("intent") === "import-linked";
   const tableLoading = navigation.state === "loading" && navigation.location?.pathname === location.pathname;
   const from = data.total === 0 ? 0 : (data.page - 1) * data.pageSize + 1;
   const to = Math.min(data.page * data.pageSize, data.total);
@@ -132,6 +167,34 @@ export default function Dashboard() {
       return;
     }
     shopify.toast.show(linkAllSummary(result));
+  }, [fetcher.state, fetcher.data, shopify]);
+
+  useEffect(() => {
+    const result = fetcher.data;
+    if (fetcher.state !== "idle" || !result || result.intent !== "export-linked") return;
+    if (result === appliedExport.current) return;
+    appliedExport.current = result;
+    if (!result.ok) {
+      shopify.toast.show(result.error || "Could not export products", { isError: true });
+      return;
+    }
+    downloadCsv(result.csv || "product title,handle\r\n", result.filename || "linked-products.csv");
+    shopify.toast.show(exportSummary(result));
+  }, [fetcher.state, fetcher.data, shopify]);
+
+  useEffect(() => {
+    const result = fetcher.data;
+    if (fetcher.state !== "idle" || !result || result.intent !== "import-linked") return;
+    if (result === appliedImport.current) return;
+    appliedImport.current = result;
+    if (!result.ok) {
+      shopify.toast.show(result.error || "Could not import products", { isError: true });
+      return;
+    }
+    shopify.toast.show(importSummary(result));
+    setImportFile(null);
+    if (importInputRef.current) importInputRef.current.value = "";
+    document.getElementById("import-products")?.hideOverlay?.();
   }, [fetcher.state, fetcher.data, shopify]);
 
   useEffect(() => {
@@ -169,6 +232,24 @@ export default function Dashboard() {
     fetcher.submit(body, { method: "POST" });
   }
 
+  function exportProducts() {
+    const body = new FormData();
+    body.set("intent", "export-linked");
+    fetcher.submit(body, { method: "POST" });
+  }
+
+  async function submitImport() {
+    if (!importFile) {
+      shopify.toast.show("Choose a CSV file", { isError: true });
+      return;
+    }
+    const csv = await importFile.text();
+    const body = new FormData();
+    body.set("intent", "import-linked");
+    body.set("csv", csv);
+    fetcher.submit(body, { method: "POST" });
+  }
+
   function chooseSort(sort) {
     updateParams({ sort, page: "1" });
     document.getElementById("dashboard-product-sort")?.hideOverlay?.();
@@ -201,11 +282,17 @@ export default function Dashboard() {
           <s-button href="/app/settings">Settings</s-button>
           <ClickButton
             loading={linking}
-            disabled={fetcher.state !== "idle" ? true : undefined}
+            disabled={busy ? true : undefined}
             onClick={addAllProducts}
           >
             Add all products
           </ClickButton>
+          <ClickButton loading={exporting} disabled={busy ? true : undefined} onClick={exportProducts}>
+            Export
+          </ClickButton>
+          <s-button commandFor="import-products" command="--show" disabled={busy ? true : undefined}>
+            Import
+          </s-button>
           <s-button variant="primary" href="/app/link">
             Link Products
           </s-button>
@@ -373,6 +460,35 @@ export default function Dashboard() {
           )}
         </s-section>
       </s-stack>
+      <s-modal id="import-products" heading="Import products">
+        <s-stack direction="block" gap="base">
+          <s-paragraph color="subdued">
+            Upload a CSV with two columns: product title and handle. Each handle is loaded from Shopify.
+            Products with the Rent tag are linked. Ready To Ship sets Calendar Start to 2 days, and Made to
+            order sets it to 15 days.
+          </s-paragraph>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            aria-label="CSV file"
+            onChange={(event) => setImportFile(event.currentTarget.files?.[0] || null)}
+          />
+          {importFile ? <s-text>{importFile.name}</s-text> : <s-text color="subdued">No file chosen</s-text>}
+        </s-stack>
+        <s-button slot="secondary-actions" commandFor="import-products" command="--hide" disabled={importing ? true : undefined}>
+          Cancel
+        </s-button>
+        <ClickButton
+          slot="primary-action"
+          variant="primary"
+          loading={importing}
+          disabled={!importFile || busy ? true : undefined}
+          onClick={submitImport}
+        >
+          Submit
+        </ClickButton>
+      </s-modal>
       <s-popover id="dashboard-product-sort">
         <s-box padding="base">
           <s-stack direction="block" gap="small-200">
@@ -453,6 +569,44 @@ function ProductToolbar({
   );
 }
 /* eslint-enable react/prop-types */
+
+function exportSummary(result) {
+  const count = Number(result.count) || 0;
+  if (!count) return "No linked products to export";
+  return `Exported ${count} product${count === 1 ? "" : "s"}`;
+}
+
+function importSummary(result) {
+  const total = Number(result.total) || 0;
+  const missing = Array.isArray(result.missing) ? result.missing : [];
+  const skipped = Array.isArray(result.skipped) ? result.skipped : [];
+  const missingHandle = Number(result.missingHandle) || 0;
+  const parts = [];
+  if (total) parts.push(linkAllSummary(result).replace(/\.$/, ""));
+  else parts.push("No products linked");
+  if (missing.length) parts.push(`${missing.length} handle${missing.length === 1 ? "" : "s"} not found (${previewList(missing)})`);
+  if (skipped.length) parts.push(`${skipped.length} skipped without the Rent tag`);
+  if (missingHandle) parts.push(`${missingHandle} row${missingHandle === 1 ? "" : "s"} missing a handle`);
+  return `${parts.join(". ")}.`;
+}
+
+function previewList(items) {
+  const shown = items.slice(0, 3).join(", ");
+  if (items.length <= 3) return shown;
+  return `${shown}, and ${items.length - 3} more`;
+}
+
+function downloadCsv(csv, filename) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
 function linkAllSummary(result) {
   const total = Number(result.total) || 0;
