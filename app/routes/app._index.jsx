@@ -125,13 +125,11 @@ export default function Dashboard() {
   const location = useLocation();
   const [checked, setChecked] = useState({});
   const [query, setQuery] = useState(data.q || "");
-  const appliedLink = useRef(null);
   const appliedExport = useRef(null);
   const appliedImport = useRef(null);
   const importInputRef = useRef(null);
   const [importFile, setImportFile] = useState(null);
   const busy = fetcher.state !== "idle";
-  const linking = busy && fetcher.formData?.get("intent") === "link-rent-tags";
   const exporting = busy && fetcher.formData?.get("intent") === "export-linked";
   const importing = busy && fetcher.formData?.get("intent") === "import-linked";
   const tableLoading = navigation.state === "loading" && navigation.location?.pathname === location.pathname;
@@ -155,18 +153,6 @@ export default function Dashboard() {
       shopify.toast.show("Products unlinked");
       setChecked({});
     }
-  }, [fetcher.state, fetcher.data, shopify]);
-
-  useEffect(() => {
-    const result = fetcher.data;
-    if (fetcher.state !== "idle" || !result || result.intent !== "link-rent-tags") return;
-    if (result === appliedLink.current) return;
-    appliedLink.current = result;
-    if (!result.ok) {
-      shopify.toast.show(result.error || "Could not link products", { isError: true });
-      return;
-    }
-    shopify.toast.show(linkAllSummary(result));
   }, [fetcher.state, fetcher.data, shopify]);
 
   useEffect(() => {
@@ -226,12 +212,6 @@ export default function Dashboard() {
     fetcher.submit(body, { method: "POST" });
   }
 
-  function addAllProducts() {
-    const body = new FormData();
-    body.set("intent", "link-rent-tags");
-    fetcher.submit(body, { method: "POST" });
-  }
-
   function exportProducts() {
     const body = new FormData();
     body.set("intent", "export-linked");
@@ -280,13 +260,6 @@ export default function Dashboard() {
       <s-stack direction="block" gap="base">
         <s-stack direction="inline" gap="small-200" justifyContent="end" alignItems="center" inlineSize="100%">
           <s-button href="/app/settings">Settings</s-button>
-          <ClickButton
-            loading={linking}
-            disabled={busy ? true : undefined}
-            onClick={addAllProducts}
-          >
-            Add all products
-          </ClickButton>
           <ClickButton loading={exporting} disabled={busy ? true : undefined} onClick={exportProducts}>
             Export
           </ClickButton>
