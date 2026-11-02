@@ -164,31 +164,6 @@ export default function GuidePage() {
           </s-stack>
         </s-section>
 
-        <s-section heading="Settings">
-          <s-stack direction="block" gap="base">
-            <s-paragraph>
-              Open Settings from the dashboard. These values are the shop defaults. Product rules on
-              Link products still control the calendar, deposit, and blocked dates.
-            </s-paragraph>
-            <s-unordered-list>
-              <s-list-item>
-                Buffer days before and buffer days after are the default extra days blocked around
-                a rental. A booking can override them from Bookings.
-              </s-list-item>
-              <s-list-item>
-                Days before start/end sets how early reminder emails go out, to the customer and to
-                the merchant address. WhatsApp is listed for later and is not sent yet.
-              </s-list-item>
-              <s-list-item>
-                From email is the sender. Merchant email is where your copy of the reminder goes.
-              </s-list-item>
-            </s-unordered-list>
-            <s-button href="/app/settings" variant="secondary">
-              Open Settings
-            </s-button>
-          </s-stack>
-        </s-section>
-
         <s-section heading="Product page">
           <s-stack direction="block" gap="base">
             <s-paragraph>
