@@ -2,10 +2,12 @@ import prisma from "../db.server";
 import { productRentableQuantity, resolveRentableQuantity } from "../lib/rentable-quantity";
 import { addDaysUtc, todayUtc, toUtcMidnight, ymd } from "../lib/dates";
 
+export const DEFAULT_BUFFER_AFTER_DAYS = 5;
+
 export function resolveBuffers(unit, settings) {
   return {
     before: unit?.bufferDaysBefore ?? settings?.defaultBufferBefore ?? 0,
-    after: unit?.bufferDaysAfter ?? settings?.defaultBufferAfter ?? 0,
+    after: unit?.bufferDaysAfter ?? settings?.defaultBufferAfter ?? DEFAULT_BUFFER_AFTER_DAYS,
   };
 }
 

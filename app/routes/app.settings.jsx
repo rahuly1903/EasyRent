@@ -53,7 +53,9 @@ export default function SettingsPage() {
         <s-block gap="base">
           <s-section heading="Buffers (defaults)">
             <s-paragraph>
-              These buffers apply to all rental products. Each product has one shared quantity,
+              These buffers apply to all rental products. After buffer defaults to 5 days, so a
+              new order keeps the product blocked for 5 days after the rental end. Each product
+              has one shared quantity,
               so a booking for any size blocks every size on those dates. Set a variant's Rentable
               quantity metafield to 0 to turn that size off. Any other value is part of that single
               product quantity. Security deposit is a product metafield (Rental security deposit)

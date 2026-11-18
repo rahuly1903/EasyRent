@@ -44,7 +44,7 @@ model Settings {
   id                       String   @id @default(cuid())
   shopId                   String   @unique
   defaultBufferBefore      Int      @default(0)
-  defaultBufferAfter       Int      @default(0)
+  defaultBufferAfter       Int      @default(5)
   reminderDaysBefore       Int      @default(2)
   reminderChannelCustomer  String   @default("email")
   reminderChannelMerchant  String   @default("email")

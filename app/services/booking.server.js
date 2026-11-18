@@ -232,8 +232,15 @@ export async function overrideBufferForBooking({ bookingId, before, after }) {
   });
   if (!b) return null;
   const settings = await getSettings(b.shopId);
-  const bfBefore = before ?? b.rentalUnit.bufferDaysBefore ?? settings.defaultBufferBefore ?? 0;
-  const bfAfter = after ?? b.rentalUnit.bufferDaysAfter ?? settings.defaultBufferAfter ?? 0;
+  const buffers = resolveBuffers(
+    {
+      bufferDaysBefore: before ?? b.rentalUnit.bufferDaysBefore,
+      bufferDaysAfter: after ?? b.rentalUnit.bufferDaysAfter,
+    },
+    settings,
+  );
+  const bfBefore = buffers.before;
+  const bfAfter = buffers.after;
   const win = computeBlockWindow({
     startDate: b.startDate,
     endDate: b.endDate,

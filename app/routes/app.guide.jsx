@@ -155,8 +155,9 @@ export default function GuidePage() {
                 Overdue returns are confirmed rentals whose end date has already passed.
               </s-list-item>
               <s-list-item>
-                Edit buffer adds extra blocked days before delivery and after return for that
-                booking only, so the item can be prepared and checked back in.
+                A new order blocks the product for 5 days after the return date. Edit buffer
+                changes the extra blocked days before delivery and after return for that booking
+                only, so the item can be prepared and checked back in.
               </s-list-item>
             </s-unordered-list>
             <s-button href="/app/bookings" variant="secondary">
