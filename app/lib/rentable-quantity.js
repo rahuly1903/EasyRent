@@ -7,6 +7,13 @@ export function resolveRentableQuantity(raw) {
   return Math.floor(n);
 }
 
+// One shared rental for the whole product. Explicit 0 keeps that size off.
+export function productRentableQuantity(raw) {
+  const variantCap = resolveRentableQuantity(raw);
+  if (variantCap < 1) return 0;
+  return 1;
+}
+
 export function quantityFromVariantNode(variant) {
   return resolveRentableQuantity(variant?.rentableQuantity?.jsonValue);
 }

@@ -1,4 +1,4 @@
-/* Rental picker: flatpickr + variant-aware availability. */
+/* Rental picker: flatpickr. One quantity is shared across every size of the product. */
 (function () {
   const RENT_FOR_NAME = /rent\s*for|duration/i;
   const DAY_VALUE = /(\d+)\s*-?\s*days?/i;

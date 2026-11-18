@@ -1,5 +1,5 @@
 import prisma from "../db.server";
-import { resolveRentableQuantity } from "../lib/rentable-quantity";
+import { productRentableQuantity, resolveRentableQuantity } from "../lib/rentable-quantity";
 import { addDaysUtc, todayUtc, toUtcMidnight, ymd } from "../lib/dates";
 
 export function resolveBuffers(unit, settings) {
@@ -62,10 +62,10 @@ export function computeBlockedRanges({ bookings, quantity, fromDate }) {
 
 export async function getBlockedRangesForUnit({ unit, settings, fromDate }) {
   const from = toUtcMidnight(fromDate) ?? todayUtc();
-  const cap = resolveRentableQuantity(unit.quantity);
+  const cap = productRentableQuantity(unit.quantity);
   const bookings = await prisma.booking.findMany({
     where: {
-      rentalUnitId: unit.id,
+      rentalUnit: { shopId: unit.shopId, productId: unit.productId },
       status: { not: "cancelled" },
       blockEnd: { gte: from },
     },
@@ -78,16 +78,21 @@ export async function getBlockedRangesForUnit({ unit, settings, fromDate }) {
   });
 }
 
-// Returns true when existing occupancy on [blockStart..blockEnd] is still below quantity.
-// Do not include the candidate booking: occupancy == quantity after a successful book is allowed.
+// Returns true when product-wide occupancy on [blockStart..blockEnd] is still below 1.
+// Bookings for every size count. Do not include the candidate booking.
 export async function canBook({ unitId, blockStart, blockEnd, quantity, excludeBookingId }) {
   const bs = toUtcMidnight(blockStart);
   const be = toUtcMidnight(blockEnd);
-  const cap = resolveRentableQuantity(quantity);
+  const cap = productRentableQuantity(quantity);
   if (cap < 1) return false;
+  const unit = await prisma.rentalUnit.findUnique({
+    where: { id: unitId },
+    select: { shopId: true, productId: true },
+  });
+  if (!unit) return false;
   const overlapping = await prisma.booking.findMany({
     where: {
-      rentalUnitId: unitId,
+      rentalUnit: { shopId: unit.shopId, productId: unit.productId },
       status: { not: "cancelled" },
       blockStart: { lte: be },
       blockEnd: { gte: bs },

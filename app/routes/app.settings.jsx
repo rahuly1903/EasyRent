@@ -53,9 +53,10 @@ export default function SettingsPage() {
         <s-block gap="base">
           <s-section heading="Buffers (defaults)">
             <s-paragraph>
-              These buffers apply to all rental products. Rentable quantity is set on each
-              product variant in Shopify (Rentable quantity metafield). Leave that field empty
-              to default to 1. Security deposit is a product metafield (Rental security deposit)
+              These buffers apply to all rental products. Each product has one shared quantity,
+              so a booking for any size blocks every size on those dates. Set a variant's Rentable
+              quantity metafield to 0 to turn that size off. Any other value is part of that single
+              product quantity. Security deposit is a product metafield (Rental security deposit)
               and is recorded on the line as a property. Automatic deposit charging via Cart
               Transform is disabled because Shopify Functions are not available for this custom app.
             </s-paragraph>

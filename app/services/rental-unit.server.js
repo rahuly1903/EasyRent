@@ -7,7 +7,8 @@ function variantTitleFrom(variant) {
   return null;
 }
 
-// One rental unit per Shopify variant so each SKU has its own calendar.
+// One rental unit per Shopify variant so the booked size is recorded.
+// Quantity is shared: one booking blocks the whole product.
 export function deriveUnitsFromVariants(variants) {
   if (!variants || variants.length === 0) return [];
   const units = [];

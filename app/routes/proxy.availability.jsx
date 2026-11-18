@@ -4,7 +4,7 @@ import { getBlockedRangesForUnit, resolveBuffers } from "../services/availabilit
 import { findUnit } from "../services/rental-unit.server";
 import { getSettings } from "../services/shop.server";
 import { syncOneProduct } from "../services/sync.server";
-import { resolveRentableQuantity } from "../lib/rentable-quantity";
+import { productRentableQuantity } from "../lib/rentable-quantity";
 import { todayUtc } from "../lib/dates";
 import { toProductGid, toVariantGid } from "../lib/shopify-ids";
 
@@ -44,7 +44,7 @@ export const loader = async ({ request }) => {
 
   const settings = await getSettings(shop.id);
   const { before, after } = resolveBuffers(unit, settings);
-  const quantity = resolveRentableQuantity(unit.quantity);
+  const quantity = productRentableQuantity(unit.quantity);
   const ranges = await getBlockedRangesForUnit({
     unit,
     settings,

@@ -73,7 +73,8 @@ export default function GuidePage() {
               </s-list-item>
               <s-list-item>
                 Each row shows the calendar window, duration options, stock, and deposit. Stock is
-                the Rentable quantity on each variant added together. An empty quantity counts as 1.
+                1 for the whole product. Booking any size blocks every size for those dates. A
+                variant with Rentable quantity set to 0 is not offered.
               </s-list-item>
               <s-list-item>
                 Edit one product, open it on the online store, or unlink it. Unlinking removes it

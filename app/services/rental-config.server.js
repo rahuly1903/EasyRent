@@ -395,7 +395,7 @@ export function durationLabelsFromVariants(variants) {
 export function stockFromVariants(variants) {
   const nodes = variants || [];
   if (!nodes.length) return 1;
-  return nodes.reduce((sum, variant) => sum + quantityFromVariantNode(variant), 0);
+  return nodes.some((variant) => quantityFromVariantNode(variant) > 0) ? 1 : 0;
 }
 
 function snapshot(product, variants) {

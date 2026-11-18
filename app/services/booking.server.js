@@ -1,6 +1,6 @@
 import prisma from "../db.server";
 import { addDaysUtc, diffDaysUtc, todayUtc, toUtcMidnight } from "../lib/dates";
-import { resolveRentableQuantity } from "../lib/rentable-quantity";
+import { productRentableQuantity } from "../lib/rentable-quantity";
 import { canBook, computeBlockWindow, resolveBuffers } from "./availability.server";
 import { findUnit } from "./rental-unit.server";
 import { getSettings } from "./shop.server";
@@ -183,7 +183,7 @@ export async function createBookingFromLineItem({
     unitId: unit.id,
     blockStart,
     blockEnd,
-    quantity: resolveRentableQuantity(unit.quantity),
+    quantity: productRentableQuantity(unit.quantity),
   });
   if (!ok) throw new Error(`Overbooking: unit ${unit.id} at capacity for ${start.toISOString()}`);
 
